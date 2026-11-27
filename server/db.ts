@@ -54,6 +54,7 @@ export function openDb(path: string) {
       "UPDATE words SET word = $word, translation = $translation, english = $english, tags = COALESCE($tags, tags) WHERE id = $id RETURNING *",
     ),
     remove: db.query<null, { id: number }>("DELETE FROM words WHERE id = $id"),
+    reset: db.query<null, { id: number }>("UPDATE words SET ok = 0, fail = 0 WHERE id = $id"),
     score: db.query<null, { id: number; ok: number; fail: number }>(
       "UPDATE words SET ok = ok + $ok, fail = fail + $fail WHERE id = $id",
     ),
@@ -100,6 +101,12 @@ export function openDb(path: string) {
     remove: (id: number) => q.remove.run({ id }).changes > 0,
 
     /** Сохраняет итоги тренировки: +1 к ok или fail за каждый ответ. */
+    /** Обнуляет счётчики успехов/неудач у этих слов; возвращает весь словарь. */
+    resetScores: db.transaction((ids: number[]) => {
+      for (const id of ids) q.reset.run({ id });
+      return q.all.all().map((r) => row(r)!);
+    }),
+
     saveResults: db.transaction((results: ResultInput[]) => {
       for (const r of results) q.score.run({ id: r.id, ok: r.success ? 1 : 0, fail: r.success ? 0 : 1 });
       return q.all.all().map((r) => row(r)!);

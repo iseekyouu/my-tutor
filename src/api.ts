@@ -28,6 +28,7 @@ export const api = {
   add: (words: NewWord[]) => request<Word[]>("/api/words", { method: "POST", body: JSON.stringify(words) }),
   update: (id: number, w: NewWord) => request<Word>(`/api/words/${id}`, { method: "PUT", body: JSON.stringify(w) }),
   remove: (id: number) => request<{ ok: true }>(`/api/words/${id}`, { method: "DELETE" }),
+  resetScores: (ids: number[]) => request<Word[]>("/api/reset", { method: "POST", body: JSON.stringify({ ids }) }),
   saveResults: (results: { id: number; success: boolean }[]) =>
     request<Word[]>("/api/results", { method: "POST", body: JSON.stringify(results) }),
 };

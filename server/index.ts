@@ -74,6 +74,17 @@ const server = Bun.serve({
     },
 
     // Итоги тренировки: [{ id, success }] → обновлённый словарь
+    // Сброс счётчиков: { ids: number[] } → обновлённый словарь
+    "/api/reset": {
+      POST: async (req) => {
+        const data = await body(req);
+        const ids = data?.ids;
+        if (!Array.isArray(ids) || !ids.every(Number.isInteger)) return error("Ожидается { ids: number[] }");
+        return json(db.resetScores(ids));
+      },
+      OPTIONS: () => new Response(null, { headers: cors }),
+    },
+
     "/api/results": {
       POST: async (req) => {
         const data = await body(req);

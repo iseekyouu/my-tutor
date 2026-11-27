@@ -47,6 +47,7 @@ export default function App() {
     return count;
   };
   const update = (id: number, item: NewWord) => call(() => api.update(id, item), (row) => setWords((ws) => ws.map((w) => (w.id === id ? row : w))));
+  const resetScores = (ids: number[]) => call(() => api.resetScores(ids), setWords);
   const remove = (id: number) => call(() => api.remove(id), () => setWords((ws) => ws.filter((w) => w.id !== id)));
 
   function start(list: Word[]) {
@@ -75,7 +76,7 @@ export default function App() {
       )}
 
       {screen.kind === "loading" && !error && <p className="empty">Загрузка…</p>}
-      {screen.kind === "dict" && <Dictionary words={words} onAdd={add} onUpdate={update} onDelete={remove} onStart={start} settings={settings} onSettings={setSettings} />}
+      {screen.kind === "dict" && <Dictionary words={words} onAdd={add} onUpdate={update} onDelete={remove} onResetScores={resetScores} onStart={start} settings={settings} onSettings={setSettings} />}
       {screen.kind === "train" && (
         <Training key={screen.key} queue={screen.queue} settings={settings} onFinish={(r) => finish(r, screen.queue.length)} />
       )}

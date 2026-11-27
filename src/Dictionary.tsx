@@ -8,13 +8,14 @@ type Props = {
   onAdd: (items: NewWord[]) => Promise<number | null>; // сколько добавлено
   onUpdate: (id: number, item: NewWord) => Promise<boolean>;
   onDelete: (id: number) => Promise<boolean>;
+  onResetScores: (ids: number[]) => Promise<boolean>;
   /** Начать тренировку по этим словам */
   onStart: (list: Word[]) => void;
   settings: Settings;
   onSettings: (s: Settings) => void;
 };
 
-export function Dictionary({ words, onAdd, onUpdate, onDelete, onStart, settings, onSettings }: Props) {
+export function Dictionary({ words, onAdd, onUpdate, onDelete, onResetScores, onStart, settings, onSettings }: Props) {
   const [word, setWord] = useState("");
   const [tr, setTr] = useState("");
   const [en, setEn] = useState("");
@@ -29,6 +30,7 @@ export function Dictionary({ words, onAdd, onUpdate, onDelete, onStart, settings
   const [tagFilter, setTagFilter] = useState<string | null>(null);
   const [filter, setFilter] = useState("");
   const [delId, setDelId] = useState<number | null>(null);
+  const [confirmReset, setConfirmReset] = useState(false);
   const wordRef = useRef<ToneInputHandle>(null);
   const trRef = useRef<ToneInputHandle>(null);
   const enRef = useRef<ToneInputHandle>(null);
@@ -59,6 +61,8 @@ export function Dictionary({ words, onAdd, onUpdate, onDelete, onStart, settings
   // Выбранный тег мог исчезнуть (последнее слово удалили или переименовали тег)
   const activeTag = tagFilter && tagNames.includes(tagFilter) ? tagFilter : null;
   const toTrain = activeTag ? words.filter((w) => w.tags.includes(activeTag)) : words;
+  // Слова с ненулевыми счётчиками — их обнуляет «Сбросить счётчики» (с учётом тега)
+  const scored = toTrain.filter((w) => w.ok + w.fail > 0);
   /** Уже существующее слово с таким же написанием (кроме exceptId). */
   const findDup = (text: string, exceptId?: number) => {
     const key = wordKey(text);
@@ -226,7 +230,31 @@ export function Dictionary({ words, onAdd, onUpdate, onDelete, onStart, settings
       <section className="card">
         <div className="list-head">
           <h2>Словарь · {words.length}</h2>
-          {words.length > 5 && <input className="search" placeholder="Поиск" value={filter} onChange={(e) => setFilter(e.target.value)} />}
+          <div className="list-tools">
+            {scored.length > 0 &&
+              (confirmReset ? (
+                <button
+                  className="small danger"
+                  autoFocus
+                  onBlur={() => setConfirmReset(false)}
+                  onClick={async () => {
+                    await onResetScores(scored.map((w) => w.id));
+                    setConfirmReset(false);
+                  }}
+                >
+                  Сбросить у {scored.length}?
+                </button>
+              ) : (
+                <button
+                  className="link"
+                  title={activeTag ? `Обнулить успехи/неудачи у слов с тегом «${activeTag}»` : "Обнулить успехи/неудачи у всех слов"}
+                  onClick={() => setConfirmReset(true)}
+                >
+                  Сбросить счётчики
+                </button>
+              ))}
+            {words.length > 5 && <input className="search" placeholder="Поиск" value={filter} onChange={(e) => setFilter(e.target.value)} />}
+          </div>
         </div>
         {allTags.length > 0 && (
           <div className="tag-filter">

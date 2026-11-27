@@ -33,6 +33,19 @@ describe("db", () => {
   });
 });
 
+describe("сброс счётчиков", () => {
+  test("обнуляет только указанные слова", () => {
+    const db = openDb(":memory:");
+    const [a, b] = db.add([
+      { word: "náam", translation: "вода", ok: 3, fail: 2 },
+      { word: "maa", translation: "идти", ok: 1, fail: 1 },
+    ]);
+    const list = db.resetScores([a.id]);
+    expect(list.find((w) => w.id === a.id)).toMatchObject({ ok: 0, fail: 0 });
+    expect(list.find((w) => w.id === b.id)).toMatchObject({ ok: 1, fail: 1 });
+  });
+});
+
 describe("теги", () => {
   test("сохраняются, чистятся, правятся", () => {
     const db = openDb(":memory:");
