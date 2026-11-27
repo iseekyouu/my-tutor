@@ -124,3 +124,4 @@ input:focus, textarea:focus { border-color: var(--accent); }
 .stats .num.bad { color: var(--bad); }
 button.danger { background: var(--bad); border-color: var(--bad); color: #fff; }
 button.danger:hover:not(:disabled) { background: var(--bad); filter: brightness(1.08); }
+.error { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 16px; padding: 10px 14px; border-radius: 10px; background: color-mix(in srgb, var(--bad) 12%, var(--card)); border: 1px solid color-mix(in srgb, var(--bad) 40%, transparent); color: var(--bad); font-size: 15px; }

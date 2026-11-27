@@ -1,58 +1,49 @@
 export type Word = {
-  id: string;
+  id: number;
   word: string; // иностранное слово
   translation: string; // перевод
   ok: number; // всего успехов
   fail: number; // всего неудач
 };
 
+export type NewWord = { word: string; translation: string; ok?: number; fail?: number };
+
 export type Direction = "foreign" | "native"; // что показываем
 export type Settings = { direction: Direction; strictTones: boolean };
 
 export type Result = { word: Word; success: boolean; given: string; revealed: boolean };
 
-const WORDS_KEY = "lingo.words.v1";
 const SETTINGS_KEY = "lingo.settings.v1";
 
-function readJSON<T>(key: string, fallback: T): T {
+// Настройки — локально на устройстве; словарь — на сервере (см. api.ts)
+export function loadSettings(): Settings {
   try {
-    const raw = localStorage.getItem(key);
-    return raw ? (JSON.parse(raw) as T) : fallback;
+    const raw = localStorage.getItem(SETTINGS_KEY);
+    if (raw) return JSON.parse(raw) as Settings;
   } catch {
-    return fallback;
+    /* хранилище недоступно */
   }
+  return { direction: "foreign", strictTones: true };
 }
-function writeJSON(key: string, value: unknown) {
+export function saveSettings(s: Settings) {
   try {
-    localStorage.setItem(key, JSON.stringify(value));
+    localStorage.setItem(SETTINGS_KEY, JSON.stringify(s));
   } catch {
-    /* хранилище недоступно — работаем в памяти */
+    /* хранилище недоступно */
   }
-}
-
-export const loadWords = () => readJSON<Word[]>(WORDS_KEY, []);
-export const saveWords = (w: Word[]) => writeJSON(WORDS_KEY, w);
-export const loadSettings = () =>
-  readJSON<Settings>(SETTINGS_KEY, { direction: "foreign", strictTones: true });
-export const saveSettings = (s: Settings) => writeJSON(SETTINGS_KEY, s);
-
-export const newId = () => Math.random().toString(36).slice(2) + Date.now().toString(36);
-
-export function makeWord(word: string, translation: string): Word {
-  return { id: newId(), word: word.trim().normalize("NFC"), translation: translation.trim().normalize("NFC"), ok: 0, fail: 0 };
 }
 
 /** Разбор массового ввода: по строке «слово - перевод» (также — – = или Tab). */
-export function parseBulk(text: string): Word[] {
+export function parseBulk(text: string): NewWord[] {
   return text
     .split(/\r?\n/)
     .map((line) => line.trim())
     .filter(Boolean)
     .map((line) => {
       const m = line.match(/^(.+?)(?:\s+[-–—=]\s+|\t)(.+)$/);
-      return m ? makeWord(m[1], m[2]) : null;
+      return m ? { word: m[1].trim(), translation: m[2].trim() } : null;
     })
-    .filter((w): w is Word => !!w && !!w.word && !!w.translation);
+    .filter((w): w is NewWord => !!w && !!w.word && !!w.translation);
 }
 
 export function shuffle<T>(arr: T[]): T[] {

@@ -1,15 +1,27 @@
 # Словарик — тренажёр слов
 
-Bun + React + Vite + TypeScript. Данные хранятся локально (localStorage).
+Весь стек на Bun: сервер `Bun.serve`, база `bun:sqlite` (файл `data.db`),
+фронтенд на React собирает и отдаёт сам Bun, без Vite.
 
-## Запуск на десктопе
+## Запуск
 
 ```bash
 bun install
-bun run dev        # http://localhost:5173
-bun run build      # сборка в dist/
-bun run preview    # проверить сборку
+bun run dev      # разработка с hot reload: http://localhost:3000
+bun run start    # продакшен-режим
+bun test         # тесты базы и проверки ответов
+bun run typecheck
 ```
+
+Переменные окружения:
+- `PORT` — порт (по умолчанию 3000)
+- `DB_PATH` — путь к файлу базы (по умолчанию `data.db` в папке проекта)
+
+Сервер слушает `0.0.0.0`, поэтому с телефона в той же Wi-Fi сети он открывается
+по `http://<IP-компьютера>:3000`.
+
+Бэкап словаря: скопировать `data.db` (при остановленном сервере) или
+сделать «Экспорт» в интерфейсе.
 
 ## Как пользоваться
 
@@ -21,24 +33,42 @@ bun run preview    # проверить сборку
 3. «Начать обучение» — слова идут в случайном порядке. Enter — проверить / дальше.
    «Показать ответ» засчитывается как ошибка.
 4. После последнего слова или «Стоп» — статистика и список слов на повторение.
+   Итоги сохраняются на сервере: у каждого слова копятся успехи/неудачи.
 
-Настройки: направление (слово → перевод / перевод → слово), «Учитывать тоны»
-(если выключить, ответ без тонов тоже засчитается).
+Настройки (направление, «Учитывать тоны») хранятся локально на устройстве.
 
-Импорт/экспорт: JSON (с накопленной статистикой) или текст `слово - перевод`.
+## API
+
+| Метод | Путь | Тело | Ответ |
+|---|---|---|---|
+| GET | `/api/words` | — | все слова |
+| POST | `/api/words` | `{word, translation}` или массив | созданные слова |
+| PUT | `/api/words/:id` | `{word, translation}` | слово |
+| DELETE | `/api/words/:id` | — | `{ok: true}` |
+| POST | `/api/results` | `[{id, success}]` | все слова с обновлённой статистикой |
+
+CORS открыт, чтобы к API могло ходить мобильное приложение.
 
 ## Структура
 
-- `src/lib.ts` — модель, хранение, проверка ответа (нормализация Unicode, тоны)
+- `server/index.ts` — HTTP-сервер и маршруты
+- `server/db.ts` — схема SQLite и запросы
+- `server/db.test.ts` — тесты
+- `src/api.ts` — клиент API
+- `src/lib.ts` — типы, проверка ответа (нормализация Unicode, тоны)
 - `src/ToneInput.tsx` — поле ввода с панелью тонов
 - `src/Dictionary.tsx`, `src/Training.tsx`, `src/Stats.tsx` — экраны
 
 ## Следующий шаг: Android
 
-План — обернуть этот же код в Capacitor:
+Обернуть фронтенд в Capacitor; приложение ходит к этому же серверу:
 
 ```bash
 bun add @capacitor/core @capacitor/android && bun add -d @capacitor/cli
 bunx cap init Словарик com.example.slovarik --web-dir dist
-bun run build && bunx cap add android && bunx cap open android
+PUBLIC_API_URL=http://<IP-компьютера>:3000 bun run build
+bunx cap add android && bunx cap sync && bunx cap open android
 ```
+
+Для HTTP (не HTTPS) в Android нужно разрешить cleartext-трафик
+(`android:usesCleartextTraffic="true"` или `server.cleartext` в capacitor.config).

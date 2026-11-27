@@ -1,47 +1,47 @@
 import { useRef, useState } from "react";
 import { ToneInput, type ToneInputHandle } from "./ToneInput";
-import { makeWord, parseBulk, type Word } from "./lib";
+import { parseBulk, type NewWord, type Word } from "./lib";
 
 type Props = {
   words: Word[];
-  setWords: (w: Word[]) => void;
+  onAdd: (items: NewWord[]) => Promise<boolean>;
+  onUpdate: (id: number, item: NewWord) => Promise<boolean>;
+  onDelete: (id: number) => Promise<boolean>;
   onStart: () => void;
 };
 
-export function Dictionary({ words, setWords, onStart }: Props) {
+export function Dictionary({ words, onAdd, onUpdate, onDelete, onStart }: Props) {
   const [word, setWord] = useState("");
   const [tr, setTr] = useState("");
   const [bulk, setBulk] = useState("");
   const [showBulk, setShowBulk] = useState(false);
-  const [editId, setEditId] = useState<string | null>(null);
+  const [editId, setEditId] = useState<number | null>(null);
   const [editWord, setEditWord] = useState("");
   const [editTr, setEditTr] = useState("");
   const [filter, setFilter] = useState("");
-  const [delId, setDelId] = useState<string | null>(null);
+  const [delId, setDelId] = useState<number | null>(null);
   const wordRef = useRef<ToneInputHandle>(null);
   const trRef = useRef<ToneInputHandle>(null);
   const fileRef = useRef<HTMLInputElement>(null);
 
-  function add() {
+  async function add() {
     if (!word.trim() || !tr.trim()) return;
-    setWords([makeWord(word, tr), ...words]);
+    if (!(await onAdd([{ word, translation: tr }]))) return;
     setWord("");
     setTr("");
     wordRef.current?.focus();
   }
 
-  function addBulk() {
+  async function addBulk() {
     const parsed = parseBulk(bulk);
-    if (!parsed.length) return;
-    setWords([...parsed, ...words]);
+    if (!parsed.length || !(await onAdd(parsed))) return;
     setBulk("");
     setShowBulk(false);
   }
 
-  function saveEdit() {
-    if (!editWord.trim() || !editTr.trim()) return;
-    setWords(words.map((w) => (w.id === editId ? { ...w, word: editWord.trim().normalize("NFC"), translation: editTr.trim().normalize("NFC") } : w)));
-    setEditId(null);
+  async function saveEdit() {
+    if (editId === null || !editWord.trim() || !editTr.trim()) return;
+    if (await onUpdate(editId, { word: editWord, translation: editTr })) setEditId(null);
   }
 
   function exportJSON() {
@@ -55,14 +55,17 @@ export function Dictionary({ words, setWords, onStart }: Props) {
 
   async function importFile(file: File) {
     const text = await file.text();
-    let incoming: Word[] = [];
+    let incoming: NewWord[] = [];
     try {
       const data = JSON.parse(text);
-      if (Array.isArray(data)) incoming = data.filter((d) => d && d.word && d.translation).map((d) => ({ ...makeWord(d.word, d.translation), ok: d.ok ?? 0, fail: d.fail ?? 0 }));
+      if (Array.isArray(data))
+        incoming = data
+          .filter((d) => d && typeof d.word === "string" && typeof d.translation === "string" && d.word.trim() && d.translation.trim())
+          .map((d) => ({ word: d.word, translation: d.translation, ok: Number(d.ok) || 0, fail: Number(d.fail) || 0 }));
     } catch {
       incoming = parseBulk(text);
     }
-    if (incoming.length) setWords([...incoming, ...words]);
+    if (incoming.length) await onAdd(incoming);
   }
 
   const q = filter.trim().toLowerCase();
@@ -131,7 +134,7 @@ export function Dictionary({ words, setWords, onStart }: Props) {
                 <span className="item-actions">
                   <button className="icon" title="Изменить" onClick={() => { setEditId(w.id); setEditWord(w.word); setEditTr(w.translation); }}>✎</button>
                   {delId === w.id ? (
-                    <button className="small danger" onClick={() => { setWords(words.filter((x) => x.id !== w.id)); setDelId(null); }} onBlur={() => setDelId(null)} autoFocus>Удалить?</button>
+                    <button className="small danger" onClick={async () => { await onDelete(w.id); setDelId(null); }} onBlur={() => setDelId(null)} autoFocus>Удалить?</button>
                   ) : (
                     <button className="icon" title="Удалить" onClick={() => setDelId(w.id)}>✕</button>
                   )}

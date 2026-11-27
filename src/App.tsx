@@ -1,21 +1,45 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { Dictionary } from "./Dictionary";
 import { Training } from "./Training";
 import { Stats } from "./Stats";
-import { loadSettings, loadWords, saveSettings, saveWords, shuffle, type Result, type Settings, type Word } from "./lib";
+import { api } from "./api";
+import { loadSettings, saveSettings, shuffle, type NewWord, type Result, type Settings, type Word } from "./lib";
 
 type Screen =
+  | { kind: "loading" }
   | { kind: "dict" }
   | { kind: "train"; queue: Word[]; key: number }
   | { kind: "stats"; results: Result[]; total: number };
 
 export default function App() {
-  const [words, setWords] = useState<Word[]>(loadWords);
+  const [words, setWords] = useState<Word[]>([]);
   const [settings, setSettings] = useState<Settings>(loadSettings);
-  const [screen, setScreen] = useState<Screen>({ kind: "dict" });
+  const [screen, setScreen] = useState<Screen>({ kind: "loading" });
+  const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => saveWords(words), [words]);
   useEffect(() => saveSettings(settings), [settings]);
+
+  /** Выполняет запрос к серверу; при ошибке показывает её и возвращает false. */
+  const call = useCallback(async <T,>(fn: () => Promise<T>, apply: (data: T) => void): Promise<boolean> => {
+    try {
+      apply(await fn());
+      setError(null);
+      return true;
+    } catch (e) {
+      setError(e instanceof Error && e.message !== "Failed to fetch" ? e.message : "Нет связи с сервером");
+      return false;
+    }
+  }, []);
+
+  const reload = useCallback(
+    () => call(api.list, (list) => { setWords(list); setScreen((s) => (s.kind === "loading" ? { kind: "dict" } : s)); }),
+    [call],
+  );
+  useEffect(() => { reload(); }, [reload]);
+
+  const add = (items: NewWord[]) => call(() => api.add(items), (created) => setWords((ws) => [...created.reverse(), ...ws]));
+  const update = (id: number, item: NewWord) => call(() => api.update(id, item), (row) => setWords((ws) => ws.map((w) => (w.id === id ? row : w))));
+  const remove = (id: number) => call(() => api.remove(id), () => setWords((ws) => ws.filter((w) => w.id !== id)));
 
   function start(list: Word[]) {
     if (!list.length) return;
@@ -23,21 +47,14 @@ export default function App() {
   }
 
   function finish(results: Result[], total: number) {
-    // обновляем накопленную статистику по словам
-    const delta = new Map<string, { ok: number; fail: number }>();
-    for (const r of results) {
-      const d = delta.get(r.word.id) ?? { ok: 0, fail: 0 };
-      r.success ? d.ok++ : d.fail++;
-      delta.set(r.word.id, d);
-    }
-    setWords((ws) => ws.map((w) => (delta.has(w.id) ? { ...w, ok: w.ok + delta.get(w.id)!.ok, fail: w.fail + delta.get(w.id)!.fail } : w)));
     setScreen({ kind: "stats", results, total });
+    if (results.length) call(() => api.saveResults(results.map((r) => ({ id: r.word.id, success: r.success }))), setWords);
   }
 
   return (
     <div className="app">
       <header>
-        <h1 onClick={() => screen.kind !== "train" && setScreen({ kind: "dict" })}>Словарик</h1>
+        <h1 onClick={() => (screen.kind === "stats" ? setScreen({ kind: "dict" }) : undefined)}>Словарик</h1>
         {screen.kind === "dict" && (
           <div className="settings">
             <label>
@@ -54,7 +71,17 @@ export default function App() {
         )}
       </header>
 
-      {screen.kind === "dict" && <Dictionary words={words} setWords={setWords} onStart={() => start(words)} />}
+      {error && (
+        <div className="error">
+          <span>{error}</span>
+          <button className="small" onClick={() => (screen.kind === "loading" ? reload() : setError(null))}>
+            {screen.kind === "loading" ? "Повторить" : "Скрыть"}
+          </button>
+        </div>
+      )}
+
+      {screen.kind === "loading" && !error && <p className="empty">Загрузка…</p>}
+      {screen.kind === "dict" && <Dictionary words={words} onAdd={add} onUpdate={update} onDelete={remove} onStart={() => start(words)} />}
       {screen.kind === "train" && (
         <Training key={screen.key} queue={screen.queue} settings={settings} onFinish={(r) => finish(r, screen.queue.length)} />
       )}
