@@ -1,4 +1,4 @@
-import type { Word } from "./lib";
+import type { NewWord, Word } from "./lib";
 
 /**
  * Адрес сервера. По умолчанию — тот же origin, что и страница.
@@ -22,7 +22,6 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   return data as T;
 }
 
-type NewWord = { word: string; translation: string; ok?: number; fail?: number };
 
 export const api = {
   list: () => request<Word[]>("/api/words"),

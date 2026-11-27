@@ -16,7 +16,16 @@ const json = (data: unknown, status = 200) => Response.json(data, { status, head
 const error = (message: string, status = 400) => json({ error: message }, status);
 
 const isText = (v: unknown): v is string => typeof v === "string" && v.trim().length > 0;
-const isNewWord = (v: any): v is NewWord => v && isText(v.word) && isText(v.translation);
+const isOptText = (v: unknown) => v === undefined || typeof v === "string";
+// Нужен хотя бы один перевод: русский (translation) или английский (english)
+const isOptTags = (v: unknown) => v === undefined || (Array.isArray(v) && v.every((t) => typeof t === "string"));
+const isNewWord = (v: any): v is NewWord =>
+  v &&
+  isText(v.word) &&
+  isOptText(v.translation) &&
+  isOptText(v.english) &&
+  isOptTags(v.tags) &&
+  (isText(v.translation) || isText(v.english));
 
 async function body(req: Request): Promise<any> {
   try {
@@ -40,7 +49,12 @@ const server = Bun.serve({
       POST: async (req) => {
         const data = await body(req);
         const items: unknown[] = Array.isArray(data) ? data : [data];
-        if (!items.length || !items.every(isNewWord)) return error("Ожидается { word, translation } или массив таких объектов");
+        if (!items.length || !items.every(isNewWord)) return error("Ожидается { word, translation?, english? } (хотя бы один перевод) или массив таких объектов");
+        // Одно слово — сообщаем о дубле; в массиве дубли просто пропускаются
+        if (!Array.isArray(data)) {
+          const dup = db.findDuplicate((data as NewWord).word);
+          if (dup) return error(`Слово «${dup.word}» уже есть в словаре`, 409);
+        }
         return json(db.add(items as NewWord[]), 201);
       },
       OPTIONS: () => new Response(null, { headers: cors }),
@@ -49,7 +63,9 @@ const server = Bun.serve({
     "/api/words/:id": {
       PUT: async (req) => {
         const data = await body(req);
-        if (!isNewWord(data)) return error("Ожидается { word, translation }");
+        if (!isNewWord(data)) return error("Ожидается { word, translation?, english? } (хотя бы один перевод)");
+        const dup = db.findDuplicate(data.word, Number(req.params.id));
+        if (dup) return error(`Слово «${dup.word}» уже есть в словаре`, 409);
         const row = db.update(Number(req.params.id), data);
         return row ? json(row) : error("Слово не найдено", 404);
       },

@@ -37,7 +37,15 @@ export default function App() {
   );
   useEffect(() => { reload(); }, [reload]);
 
-  const add = (items: NewWord[]) => call(() => api.add(items), (created) => setWords((ws) => [...created.reverse(), ...ws]));
+  /** Добавляет слова; возвращает, сколько добавлено (дубли сервер пропускает), или null при ошибке. */
+  const add = async (items: NewWord[]) => {
+    let count: number | null = null;
+    await call(() => api.add(items), (created) => {
+      count = created.length;
+      setWords((ws) => [...created.reverse(), ...ws]);
+    });
+    return count;
+  };
   const update = (id: number, item: NewWord) => call(() => api.update(id, item), (row) => setWords((ws) => ws.map((w) => (w.id === id ? row : w))));
   const remove = (id: number) => call(() => api.remove(id), () => setWords((ws) => ws.filter((w) => w.id !== id)));
 
@@ -55,20 +63,6 @@ export default function App() {
     <div className="app">
       <header>
         <h1 onClick={() => (screen.kind === "stats" ? setScreen({ kind: "dict" }) : undefined)}>Словарик</h1>
-        {screen.kind === "dict" && (
-          <div className="settings">
-            <label>
-              <select value={settings.direction} onChange={(e) => setSettings({ ...settings, direction: e.target.value as Settings["direction"] })}>
-                <option value="foreign">Слово → перевод</option>
-                <option value="native">Перевод → слово</option>
-              </select>
-            </label>
-            <label className="check">
-              <input type="checkbox" checked={settings.strictTones} onChange={(e) => setSettings({ ...settings, strictTones: e.target.checked })} />
-              Учитывать тоны
-            </label>
-          </div>
-        )}
       </header>
 
       {error && (
@@ -81,7 +75,7 @@ export default function App() {
       )}
 
       {screen.kind === "loading" && !error && <p className="empty">Загрузка…</p>}
-      {screen.kind === "dict" && <Dictionary words={words} onAdd={add} onUpdate={update} onDelete={remove} onStart={() => start(words)} />}
+      {screen.kind === "dict" && <Dictionary words={words} onAdd={add} onUpdate={update} onDelete={remove} onStart={start} settings={settings} onSettings={setSettings} />}
       {screen.kind === "train" && (
         <Training key={screen.key} queue={screen.queue} settings={settings} onFinish={(r) => finish(r, screen.queue.length)} />
       )}

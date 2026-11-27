@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { ToneInput, type ToneInputHandle } from "./ToneInput";
-import { isCorrect, type Result, type Settings, type Word } from "./lib";
+import { isCorrect, meaning, type Result, type Settings, type Word } from "./lib";
 
 type Props = {
   queue: Word[];
@@ -19,8 +19,11 @@ export function Training({ queue, settings, onFinish }: Props) {
   const nextRef = useRef<HTMLButtonElement>(null);
 
   const current = queue[index];
-  const prompt = settings.direction === "foreign" ? current.word : current.translation;
-  const expected = settings.direction === "foreign" ? current.translation : current.word;
+  const foreign = settings.direction === "foreign";
+  const prompt = foreign ? current.word : meaning(current);
+  // Показываем слово — принимаем и русский, и английский перевод
+  const expected = foreign ? meaning(current) : current.word;
+  const accepted = foreign ? [current.translation, current.english] : [current.word];
   const okCount = results.filter((r) => r.success).length;
 
   useEffect(() => {
@@ -30,7 +33,7 @@ export function Training({ queue, settings, onFinish }: Props) {
 
   function settle(revealed: boolean) {
     if (phase.kind !== "ask") return;
-    const success = !revealed && isCorrect(answer, expected, settings.strictTones);
+    const success = !revealed && isCorrect(answer, accepted, settings.strictTones);
     setResults([...results, { word: current, success, given: answer, revealed }]);
     setPhase({ kind: "answered", success, revealed });
   }
@@ -64,8 +67,9 @@ export function Training({ queue, settings, onFinish }: Props) {
           value={answer}
           onChange={setAnswer}
           onEnter={() => (phase.kind === "ask" ? settle(false) : next())}
-          placeholder="Перевод…"
+          placeholder={foreign ? "Перевод (рус. или англ.)…" : "Слово…"}
           disabled={phase.kind !== "ask"}
+          tones={!foreign}
         />
 
         {phase.kind === "ask" ? (

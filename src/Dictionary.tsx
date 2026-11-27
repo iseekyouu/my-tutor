@@ -1,48 +1,127 @@
-import { useRef, useState } from "react";
+import { useLayoutEffect, useMemo, useRef, useState } from "react";
 import { ToneInput, type ToneInputHandle } from "./ToneInput";
-import { parseBulk, type NewWord, type Word } from "./lib";
+import { TagInput } from "./TagInput";
+import { cleanTags, meaning, parseBulk, wordKey, type NewWord, type Settings, type Word } from "./lib";
 
 type Props = {
   words: Word[];
-  onAdd: (items: NewWord[]) => Promise<boolean>;
+  onAdd: (items: NewWord[]) => Promise<number | null>; // сколько добавлено
   onUpdate: (id: number, item: NewWord) => Promise<boolean>;
   onDelete: (id: number) => Promise<boolean>;
-  onStart: () => void;
+  /** Начать тренировку по этим словам */
+  onStart: (list: Word[]) => void;
+  settings: Settings;
+  onSettings: (s: Settings) => void;
 };
 
-export function Dictionary({ words, onAdd, onUpdate, onDelete, onStart }: Props) {
+export function Dictionary({ words, onAdd, onUpdate, onDelete, onStart, settings, onSettings }: Props) {
   const [word, setWord] = useState("");
   const [tr, setTr] = useState("");
+  const [en, setEn] = useState("");
+  const [tags, setTags] = useState<string[]>([]); // остаются после добавления — удобно вводить группу
   const [bulk, setBulk] = useState("");
   const [showBulk, setShowBulk] = useState(false);
   const [editId, setEditId] = useState<number | null>(null);
   const [editWord, setEditWord] = useState("");
   const [editTr, setEditTr] = useState("");
+  const [editEn, setEditEn] = useState("");
+  const [editTags, setEditTags] = useState<string[]>([]);
+  const [tagFilter, setTagFilter] = useState<string | null>(null);
   const [filter, setFilter] = useState("");
   const [delId, setDelId] = useState<number | null>(null);
   const wordRef = useRef<ToneInputHandle>(null);
   const trRef = useRef<ToneInputHandle>(null);
+  const enRef = useRef<ToneInputHandle>(null);
   const fileRef = useRef<HTMLInputElement>(null);
+  const savingRef = useRef(false);
+  const openIdRef = useRef<number | null>(null); // открытая правка — для обработчиков, сработавших после закрытия
+  const openEdit = (id: number | null) => {
+    openIdRef.current = id;
+    setEditId(id);
+  };
+  function startEdit(w: Word) {
+    openEdit(w.id);
+    setEditWord(w.word);
+    setEditTr(w.translation);
+    setEditEn(w.english);
+    setEditTags(w.tags);
+  }
+
+  /** Все теги словаря с количеством слов, по алфавиту. */
+  const allTags = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const w of words) for (const t of w.tags) counts.set(t, (counts.get(t) ?? 0) + 1);
+    return [...counts].sort(([a], [b]) => a.localeCompare(b, "ru"));
+  }, [words]);
+  const tagNames = allTags.map(([t]) => t);
+  // Недавние теги: по словам от новых к старым (словарь отсортирован так с сервера)
+  const recentTags = useMemo(() => [...new Set(words.flatMap((w) => w.tags))], [words]);
+  // Выбранный тег мог исчезнуть (последнее слово удалили или переименовали тег)
+  const activeTag = tagFilter && tagNames.includes(tagFilter) ? tagFilter : null;
+  const toTrain = activeTag ? words.filter((w) => w.tags.includes(activeTag)) : words;
+  /** Уже существующее слово с таким же написанием (кроме exceptId). */
+  const findDup = (text: string, exceptId?: number) => {
+    const key = wordKey(text);
+    return key ? (words.find((w) => w.id !== exceptId && wordKey(w.word) === key) ?? null) : null;
+  };
+  const dup = findDup(word);
+  const editDup = editId === null ? null : findDup(editWord, editId);
+  const canAdd = !!word.trim() && !!(tr.trim() || en.trim()) && !dup;
+  const [notice, setNotice] = useState<string | null>(null);
+
+  /** Сообщение после добавления списком/импорта: сколько добавлено и сколько дублей пропущено. */
+  function report(sent: number, added: number) {
+    const skipped = sent - added;
+    setNotice(`Добавлено: ${added}` + (skipped ? `, пропущено дублей: ${skipped}` : ""));
+  }
 
   async function add() {
-    if (!word.trim() || !tr.trim()) return;
-    if (!(await onAdd([{ word, translation: tr }]))) return;
+    if (!canAdd) return;
+    setNotice(null);
+    if ((await onAdd([{ word, translation: tr, english: en, tags }])) === null) return;
     setWord("");
     setTr("");
+    setEn("");
     wordRef.current?.focus();
   }
 
   async function addBulk() {
-    const parsed = parseBulk(bulk);
-    if (!parsed.length || !(await onAdd(parsed))) return;
+    const parsed = parseBulk(bulk).map((w) => ({ ...w, tags }));
+    if (!parsed.length) return;
+    const added = await onAdd(parsed);
+    if (added === null) return;
+    report(parsed.length, added);
     setBulk("");
     setShowBulk(false);
   }
 
-  async function saveEdit() {
-    if (editId === null || !editWord.trim() || !editTr.trim()) return;
-    if (await onUpdate(editId, { word: editWord, translation: editTr })) setEditId(null);
+  /**
+   * Сохраняет правку. leaving — правку покидают (Esc или фокус ушёл из строки):
+   * тогда незаполненная правка отбрасывается, а не держит строку открытой.
+   */
+  async function saveEdit(leaving = false) {
+    const id = editId;
+    if (id === null || savingRef.current || openIdRef.current !== id) return;
+    // Закрываем только «свою» правку: пока шёл запрос, могли открыть другое слово
+    const close = () => openIdRef.current === id && openEdit(null);
+    const orig = words.find((w) => w.id === id);
+    const valid = !!editWord.trim() && !!(editTr.trim() || editEn.trim()) && !findDup(editWord, id);
+    if (!valid) return leaving ? close() : undefined;
+    const sameTags = orig && orig.tags.join("\n") === editTags.join("\n");
+    if (orig && orig.word === editWord && orig.translation === editTr && orig.english === editEn && sameTags) return close();
+    savingRef.current = true;
+    try {
+      if (await onUpdate(id, { word: editWord, translation: editTr, english: editEn, tags: editTags })) close();
+    } finally {
+      savingRef.current = false;
+    }
   }
+
+  // Последняя версия saveEdit — для отложенного вызова после потери фокуса
+  const saveEditRef = useRef(saveEdit);
+  useLayoutEffect(() => {
+    saveEditRef.current = saveEdit;
+  });
 
   function exportJSON() {
     const blob = new Blob([JSON.stringify(words, null, 2)], { type: "application/json" });
@@ -60,29 +139,49 @@ export function Dictionary({ words, onAdd, onUpdate, onDelete, onStart }: Props)
       const data = JSON.parse(text);
       if (Array.isArray(data))
         incoming = data
-          .filter((d) => d && typeof d.word === "string" && typeof d.translation === "string" && d.word.trim() && d.translation.trim())
-          .map((d) => ({ word: d.word, translation: d.translation, ok: Number(d.ok) || 0, fail: Number(d.fail) || 0 }));
+          .map((d) => ({
+            word: typeof d?.word === "string" ? d.word : "",
+            translation: typeof d?.translation === "string" ? d.translation : "",
+            english: typeof d?.english === "string" ? d.english : "",
+            tags: cleanTags(d?.tags),
+            ok: Number(d?.ok) || 0,
+            fail: Number(d?.fail) || 0,
+          }))
+          .filter((d) => d.word.trim() && (d.translation.trim() || d.english.trim()));
     } catch {
       incoming = parseBulk(text);
     }
-    if (incoming.length) await onAdd(incoming);
+    if (!incoming.length) return setNotice("В файле не найдено слов");
+    const added = await onAdd(incoming);
+    if (added !== null) report(incoming.length, added);
   }
 
   const q = filter.trim().toLowerCase();
-  const shown = q ? words.filter((w) => w.word.toLowerCase().includes(q) || w.translation.toLowerCase().includes(q)) : words;
+  const shown = q ? toTrain.filter((w) => [w.word, w.translation, w.english, ...w.tags].some((s) => s.toLowerCase().includes(q))) : toTrain;
 
   return (
     <div className="screen">
       <section className="card">
         <h2>Добавить слово</h2>
         <div className="add-form">
-          <ToneInput ref={wordRef} value={word} onChange={setWord} placeholder="Слово (иностранное)" onEnter={() => trRef.current?.focus()} />
-          <ToneInput ref={trRef} value={tr} onChange={setTr} placeholder="Перевод" onEnter={add} />
-          <button className="primary" onClick={add} disabled={!word.trim() || !tr.trim()}>
+          <ToneInput ref={wordRef} value={word} onChange={setWord} placeholder="Слово (иностранное)" onEnter={() => enRef.current?.focus()} />
+          <div className="translations">
+            <ToneInput ref={enRef} value={en} onChange={setEn} placeholder="English" onEnter={() => trRef.current?.focus()} tones={false} />
+            <ToneInput ref={trRef} value={tr} onChange={setTr} placeholder="Перевод (рус.)" onEnter={add} tones={false} />
+            <TagInput value={tags} onChange={setTags} suggestions={tagNames} recent={recentTags} onEnter={add} placeholder="Теги (Enter или запятая)" />
+          </div>
+          {/* Не disabled, а aria-disabled: иначе Tab перепрыгивает кнопку. tabIndex — для Safari */}
+          <button className="primary" onClick={add} aria-disabled={!canAdd} tabIndex={0}>
             Добавить
           </button>
         </div>
-        <p className="hint">Несколько вариантов перевода — через запятую: «дом, здание». Кнопка «тон» — тайские тоновые знаки и тоны в транслитерации.</p>
+        {dup && (
+          <p className="warn">
+            Уже есть в словаре: <b>{dup.word}</b> — {meaning(dup)}
+          </p>
+        )}
+        {notice && <p className="notice">{notice}</p>}
+        <p className="hint">Достаточно одного перевода — русского или английского; в тренировке засчитывается любой. Несколько вариантов — через запятую: «дом, здание». Гласные с тонами — в таблице под полем слова: строка — гласная, столбец — тон (средний, низкий, нисходящий, высокий, восходящий).</p>
 
         <div className="row-actions">
           <button className="link" onClick={() => setShowBulk(!showBulk)}>
@@ -95,7 +194,8 @@ export function Dictionary({ words, onAdd, onUpdate, onDelete, onStart }: Props)
 
         {showBulk && (
           <div className="bulk">
-            <textarea value={bulk} onChange={(e) => setBulk(e.target.value)} rows={6} placeholder={"По одному на строку:\nสวัสดี - привет\nขอบคุณ - спасибо"} />
+            {tags.length > 0 && <p className="hint">Всем словам из списка добавятся теги из поля «Теги»: {tags.join(", ")}</p>}
+            <textarea value={bulk} onChange={(e) => setBulk(e.target.value)} rows={6} placeholder={"По одному на строку: слово - перевод - english\nสวัสดี - привет - hello\nขอบคุณ - спасибо\nแมว - - cat"} />
             <button className="primary" onClick={addBulk} disabled={!parseBulk(bulk).length}>
               Добавить {parseBulk(bulk).length || ""}
             </button>
@@ -103,36 +203,99 @@ export function Dictionary({ words, onAdd, onUpdate, onDelete, onStart }: Props)
         )}
       </section>
 
-      <button className="start" onClick={onStart} disabled={!words.length}>
-        Начать обучение {words.length ? `(${words.length})` : ""}
-      </button>
+      <section className="card train-box">
+        <div className="settings">
+          <label title="Что показывается на карточке и что нужно вводить">
+            <span>Показывать:</span>
+            <select value={settings.direction} onChange={(e) => onSettings({ ...settings, direction: e.target.value as Settings["direction"] })}>
+              <option value="foreign">слово → вводить перевод</option>
+              <option value="native">перевод → вводить слово</option>
+            </select>
+          </label>
+          <label className="check" title="Включено: náam и naam — разные ответы. Выключено: знаки тонов не проверяются">
+            <input type="checkbox" checked={settings.strictTones} onChange={(e) => onSettings({ ...settings, strictTones: e.target.checked })} />
+            Учитывать тоны
+          </label>
+        </div>
+        <button className="start" onClick={() => onStart(toTrain)} disabled={!toTrain.length}>
+          Начать обучение {toTrain.length ? `(${toTrain.length})` : ""}
+          {activeTag && <span className="start-tag"> · {activeTag}</span>}
+        </button>
+      </section>
 
       <section className="card">
         <div className="list-head">
           <h2>Словарь · {words.length}</h2>
           {words.length > 5 && <input className="search" placeholder="Поиск" value={filter} onChange={(e) => setFilter(e.target.value)} />}
         </div>
+        {allTags.length > 0 && (
+          <div className="tag-filter">
+            <button className={activeTag ? "" : "active"} onClick={() => setTagFilter(null)}>
+              Все · {words.length}
+            </button>
+            {allTags.map(([t, n]) => (
+              <button key={t} className={activeTag === t ? "active" : ""} onClick={() => setTagFilter(activeTag === t ? null : t)}>
+                {t} · {n}
+              </button>
+            ))}
+          </div>
+        )}
         {!words.length && <p className="empty">Словарь пуст. Добавьте первые слова выше.</p>}
         <ul className="words">
           {shown.map((w) =>
             editId === w.id ? (
-              <li key={w.id} className="editing">
-                <ToneInput value={editWord} onChange={setEditWord} onEnter={saveEdit} />
-                <ToneInput value={editTr} onChange={setEditTr} onEnter={saveEdit} />
-                <div className="item-actions">
-                  <button className="primary small" onClick={saveEdit}>Сохранить</button>
-                  <button className="small" onClick={() => setEditId(null)}>Отмена</button>
+              <li
+                key={w.id}
+                className="editing"
+                onKeyDown={(e) => e.key === "Escape" && saveEdit(true)}
+                onBlur={(e) => {
+                  // Фокус ушёл за пределы строки — сохраняем. Отложенно: поле тегов
+                  // при потере фокуса само дописывает набранный тег, ждём это обновление
+                  if (!e.currentTarget.contains(e.relatedTarget as Node | null)) setTimeout(() => saveEditRef.current(true));
+                }}
+              >
+                <div className="translations">
+                  <ToneInput value={editWord} onChange={setEditWord} onEnter={saveEdit} autoFocus />
+                  {editDup && (
+                    <p className="warn">
+                      Уже есть: <b>{editDup.word}</b> — {meaning(editDup)}. Правка не сохранится.
+                    </p>
+                  )}
+                </div>
+                <div className="translations">
+                  <ToneInput value={editEn} onChange={setEditEn} onEnter={saveEdit} placeholder="English" tones={false} />
+                  <ToneInput value={editTr} onChange={setEditTr} onEnter={saveEdit} placeholder="Перевод (рус.)" tones={false} />
+                  <TagInput value={editTags} onChange={setEditTags} suggestions={tagNames} recent={recentTags} onEnter={saveEdit} />
                 </div>
               </li>
             ) : (
-              <li key={w.id}>
+              <li key={w.id} className="editable" title="Нажмите, чтобы изменить" onClick={() => startEdit(w)}>
                 <span className="w">{w.word}</span>
-                <span className="t">{w.translation}</span>
+                <span className="t">
+                  {meaning(w)}
+                  {w.tags.length > 0 && (
+                    <span className="tags">
+                      {w.tags.map((t) => (
+                        <button
+                          key={t}
+                          className="tag"
+                          title="Показать слова с этим тегом"
+                          onClick={(e) => {
+                            e.stopPropagation(); // клик по тегу — фильтр, а не правка
+                            setTagFilter(t);
+                          }}
+                        >
+                          {t}
+                        </button>
+                      ))}
+                    </span>
+                  )}
+                </span>
                 <span className="score" title="успехи / неудачи">
                   {w.ok + w.fail > 0 && (<><b className="ok">{w.ok}</b>/<b className="bad">{w.fail}</b></>)}
                 </span>
-                <span className="item-actions">
-                  <button className="icon" title="Изменить" onClick={() => { setEditId(w.id); setEditWord(w.word); setEditTr(w.translation); }}>✎</button>
+                {/* Удаление не открывает правку */}
+                <span className="item-actions" onClick={(e) => e.stopPropagation()}>
                   {delId === w.id ? (
                     <button className="small danger" onClick={async () => { await onDelete(w.id); setDelId(null); }} onBlur={() => setDelId(null)} autoFocus>Удалить?</button>
                   ) : (

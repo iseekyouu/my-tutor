@@ -1,4 +1,4 @@
-import type { Result, Settings, Word } from "./lib";
+import { meaning, type Result, type Settings, type Word } from "./lib";
 
 type Props = {
   results: Result[];
@@ -12,8 +12,8 @@ export function Stats({ results, total, settings, onRepeat, onBack }: Props) {
   const ok = results.filter((r) => r.success).length;
   const bad = results.filter((r) => !r.success);
   const pct = results.length ? Math.round((ok / results.length) * 100) : 0;
-  const expectedOf = (w: Word) => (settings.direction === "foreign" ? w.translation : w.word);
-  const promptOf = (w: Word) => (settings.direction === "foreign" ? w.word : w.translation);
+  const expectedOf = (w: Word) => (settings.direction === "foreign" ? meaning(w) : w.word);
+  const promptOf = (w: Word) => (settings.direction === "foreign" ? w.word : meaning(w));
 
   return (
     <div className="screen">
