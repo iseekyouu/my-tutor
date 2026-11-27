@@ -78,6 +78,28 @@ CORS открыт, чтобы к API могло ходить мобильное 
 - `src/ToneInput.tsx` — поле ввода с таблицей гласных с тонами
 - `src/Dictionary.tsx`, `src/Training.tsx`, `src/Stats.tsx` — экраны
 
+## Деплой на Fly.io
+
+Конфигурация — `Dockerfile` и `fly.toml` (регион `sin`, Сингапур). База SQLite лежит
+на постоянном томе `/data`, поэтому машина должна быть ровно одна.
+
+Один раз:
+
+```bash
+brew install flyctl && fly auth login
+fly volumes create data --size 1 --region sin   # диск под базу
+```
+
+Каждый деплой:
+
+```bash
+fly deploy
+fly scale count 1     # после первого деплоя: Fly по умолчанию создаёт две машины
+```
+
+Сайт — `https://my-tutor.fly.dev`. Доступ открыт всем, кто знает адрес.
+Перенести локальный словарь: «Экспорт» здесь → «Импорт» на сайте. Бэкап базы с сервера: `fly ssh sftp get /data/data.db`.
+
 ## Следующий шаг: Android
 
 Обернуть фронтенд в Capacitor; приложение ходит к этому же серверу:

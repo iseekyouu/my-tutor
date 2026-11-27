@@ -1,0 +1,34 @@
+# fly.toml app configuration file generated for my-tutor on 2026-11-27T10:40:20Z
+#
+# See https://docs.fly.io/reference/configuration for information about how to use this file.
+#
+
+app = 'my-tutor'
+primary_region = 'sin'  # Сингапур — ближайший к Таиланду
+
+[build]
+
+[env]
+  PORT = '8080'
+  DB_PATH = '/data/data.db'
+
+# Постоянный том для SQLite: без него база стирается при каждом деплое и остановке.
+# Создать один раз: fly volumes create data --size 1 --region sin
+[mounts]
+  source = 'data'
+  destination = '/data'
+
+[http_service]
+  internal_port = 8080
+  force_https = true
+  auto_stop_machines = 'stop'
+  auto_start_machines = true
+  min_machines_running = 0
+  processes = ['app']
+
+# SQLite на томе — работает ровно одна машина: fly scale count 1
+
+[[vm]]
+  memory = '256mb'
+  cpu_kind = 'shared'
+  cpus = 1
