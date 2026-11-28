@@ -17,17 +17,26 @@ export type Settings = { direction: Direction; strictTones: boolean };
 /** overruled — ответ сочли неверным, но пользователь засчитал его (верно по смыслу, опечатка) */
 export type Result = { word: Word; success: boolean; given: string; revealed: boolean; overruled?: boolean };
 
-const SETTINGS_KEY = "lingo.settings.v1";
+// v2: «Учитывать тоны» по умолчанию выключено. Из v1 переносится только направление —
+// там тоны были включены по умолчанию и сохранялись сразу при первом открытии
+const SETTINGS_KEY = "lingo.settings.v2";
+const OLD_SETTINGS_KEY = "lingo.settings.v1";
+const DEFAULT_SETTINGS: Settings = { direction: "foreign", strictTones: false };
 
 // Настройки — локально на устройстве; словарь — на сервере (см. api.ts)
 export function loadSettings(): Settings {
   try {
     const raw = localStorage.getItem(SETTINGS_KEY);
-    if (raw) return JSON.parse(raw) as Settings;
+    if (raw) return { ...DEFAULT_SETTINGS, ...(JSON.parse(raw) as Partial<Settings>) };
+    const old = localStorage.getItem(OLD_SETTINGS_KEY);
+    if (old) {
+      const { direction } = JSON.parse(old) as Partial<Settings>;
+      if (direction === "foreign" || direction === "native") return { ...DEFAULT_SETTINGS, direction };
+    }
   } catch {
-    /* хранилище недоступно */
+    /* хранилище недоступно или битое значение */
   }
-  return { direction: "foreign", strictTones: true };
+  return DEFAULT_SETTINGS;
 }
 export function saveSettings(s: Settings) {
   try {

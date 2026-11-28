@@ -8,7 +8,7 @@ import { cleanTags, meaning, parseBulk, wordKey, type NewWord, type Settings, ty
 type Props = {
   words: Word[];
   onAdd: (items: NewWord[]) => Promise<number | null>; // сколько добавлено
-  onUpdate: (id: number, item: NewWord) => Promise<boolean>;
+  onUpdate: (id: number, item: NewWord) => Promise<Word | null>;
   onDelete: (id: number) => Promise<boolean>;
   onResetScores: (ids: number[]) => Promise<boolean>;
   /** Начать тренировку по этим словам */

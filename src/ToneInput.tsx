@@ -21,16 +21,18 @@ type Props = {
   className?: string;
   /** Показывать панель гласных с тонами (не нужна для полей с русским переводом) */
   tones?: boolean;
+  /** Таблица тонов раскрыта сразу (иначе — по кнопке «тон») */
+  tonesOpen?: boolean;
 };
 
 export type ToneInputHandle = { focus: () => void };
 
 export const ToneInput = forwardRef<ToneInputHandle, Props>(function ToneInput(
-  { value, onChange, onEnter, placeholder, disabled, autoFocus, className, tones = true },
+  { value, onChange, onEnter, placeholder, disabled, autoFocus, className, tones = true, tonesOpen = true },
   ref,
 ) {
   const input = useRef<HTMLInputElement>(null);
-  const [open, setOpen] = useState(true);
+  const [open, setOpen] = useState(tonesOpen);
   useImperativeHandle(ref, () => ({ focus: () => input.current?.focus() }));
 
   function insert(text: string) {

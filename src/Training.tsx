@@ -1,65 +1,88 @@
 import { useEffect, useRef, useState } from "react";
 import { SpeakButton } from "./SpeakButton";
+import { ThaiFillButton } from "./ThaiFillButton";
 import { ToneInput, type ToneInputHandle } from "./ToneInput";
-import { isCorrect, meaning, type Result, type Settings, type Word } from "./lib";
+import { isCorrect, meaning, type NewWord, type Result, type Settings, type Word } from "./lib";
 
 type Props = {
   queue: Word[];
   settings: Settings;
   onFinish: (results: Result[]) => void;
-  /** Тайского написания не было — озвучка его нашла, сохранить в словарь */
-  onThai?: (word: Word, thai: string) => void;
+  /** Сохранить правку слова в словарь; возвращает сохранённое слово или null при ошибке */
+  onUpdate: (id: number, item: NewWord) => Promise<Word | null>;
 };
 
 type Phase = { kind: "ask" } | { kind: "answered"; success: boolean; revealed: boolean };
 
-export function Training({ queue, settings, onFinish, onThai }: Props) {
+export function Training({ queue, settings, onFinish, onUpdate }: Props) {
   const [index, setIndex] = useState(0);
   const [answer, setAnswer] = useState("");
   const [phase, setPhase] = useState<Phase>({ kind: "ask" });
   const [results, setResults] = useState<Result[]>([]);
+  const [editing, setEditing] = useState(false);
+  // Слова, исправленные во время теста (очередь — снимок словаря на момент старта)
+  const [edited, setEdited] = useState<Record<number, Word>>({});
   const inputRef = useRef<ToneInputHandle>(null);
   const nextRef = useRef<HTMLButtonElement>(null);
-  // Тайское написание, найденное озвучкой во время тренировки (очередь — снимок словаря)
-  const [foundThai, setFoundThai] = useState<Record<number, string>>({});
 
-  const current = queue[index];
+  const current = edited[queue[index].id] ?? queue[index];
   const foreign = settings.direction === "foreign";
   const prompt = foreign ? current.word : meaning(current);
-  // Показываем слово — принимаем и русский, и английский перевод
   const expected = foreign ? meaning(current) : current.word;
-  // Слово можно написать и транслитерацией, и тайскими буквами
-  const accepted = foreign ? [current.translation, current.english] : [current.word, current.thai];
+  // Показываем слово — принимаем и русский, и английский перевод;
+  // показываем перевод — слово можно написать и транслитерацией, и тайскими буквами
+  const acceptedOf = (w: Word) => (foreign ? [w.translation, w.english] : [w.word, w.thai]);
   const okCount = results.filter((r) => r.success).length;
-  const thai = current.thai || foundThai[current.id] || "";
-  const fillThai = current.thai
-    ? undefined
-    : (t: string) => {
-        setFoundThai((f) => ({ ...f, [current.id]: t }));
-        onThai?.(current, t);
-      };
 
   useEffect(() => {
+    if (editing) return;
     if (phase.kind === "ask") inputRef.current?.focus();
     else nextRef.current?.focus();
-  }, [phase, index]);
+  }, [phase, index, editing]);
 
   function settle(revealed: boolean) {
     if (phase.kind !== "ask") return;
-    const success = !revealed && isCorrect(answer, accepted, settings.strictTones);
+    const success = !revealed && isCorrect(answer, acceptedOf(current), settings.strictTones);
     setResults([...results, { word: current, success, given: answer, revealed }]);
     setPhase({ kind: "answered", success, revealed });
   }
 
-  /** Ответ сочли неверным, но по смыслу он верный (опечатка, другая формулировка) — засчитать и сразу дальше. */
-  function overrule() {
-    if (phase.kind !== "answered" || phase.success || phase.revealed) return;
-    const updated = results.map((r, i) => (i === results.length - 1 ? { ...r, success: true, overruled: true } : r));
+  /** Последний ответ — засчитать как верный и сразу дальше. */
+  function acceptLast(list: Result[]) {
+    const updated = list.map((r, i) => (i === list.length - 1 ? { ...r, success: true, overruled: true } : r));
     setResults(updated);
     next(updated);
   }
 
+  /** Ответ сочли неверным, но по смыслу он верный (опечатка, другая формулировка). */
+  function overrule() {
+    if (phase.kind !== "answered" || phase.success || phase.revealed) return;
+    acceptLast(results);
+  }
+
+  /** Сохраняет правку слова; если теперь ответ подходит — засчитывает и идёт дальше. */
+  async function saveEdit(item: NewWord) {
+    const row = await onUpdate(current.id, item);
+    if (!row) return false;
+    setEdited((e) => ({ ...e, [row.id]: row }));
+    const list = results.map((r) => (r.word.id === row.id ? { ...r, word: row } : r));
+    setEditing(false);
+    const wasWrong = phase.kind === "answered" && !phase.success && !phase.revealed;
+    if (wasWrong && isCorrect(answer, acceptedOf(row), settings.strictTones)) acceptLast(list);
+    else setResults(list);
+    return true;
+  }
+
+  /** Озвучка нашла тайское написание, которого не было, — в словарь. */
+  const fillThai = current.thai
+    ? undefined
+    : (thai: string) => {
+        setEdited((e) => ({ ...e, [current.id]: { ...current, thai } }));
+        onUpdate(current.id, { word: current.word, translation: current.translation, english: current.english, thai });
+      };
+
   function next(final = results) {
+    setEditing(false);
     if (index + 1 >= queue.length) return onFinish(final);
     setIndex(index + 1);
     setAnswer("");
@@ -83,7 +106,7 @@ export function Training({ queue, settings, onFinish, onThai }: Props) {
         <div className="prompt">
           {prompt}
           {foreign && <SpeakButton id={current.id} onThai={fillThai} />}
-          {foreign && thai && <div className="thai">{thai}</div>}
+          {foreign && current.thai && <div className="thai">{current.thai}</div>}
         </div>
 
         <ToneInput
@@ -94,11 +117,13 @@ export function Training({ queue, settings, onFinish, onThai }: Props) {
           onEnter={() => (phase.kind === "ask" ? settle(false) : next())}
           placeholder={foreign ? "Перевод (рус. или англ.)…" : "Слово…"}
           disabled={phase.kind !== "ask"}
-          tones={!foreign}
+          // Тоны нужны, только когда вводишь слово и они проверяются; таблица — по кнопке «тон»
+          tones={!foreign && settings.strictTones}
+          tonesOpen={false}
         />
 
         {phase.kind === "ask" ? (
-          <div className="buttons">
+          <div className="buttons before-answer">
             <button className="primary" onClick={() => settle(false)} disabled={!answer.trim()}>Проверить</button>
             <button onClick={() => settle(true)}>Показать ответ</button>
           </div>
@@ -110,21 +135,71 @@ export function Training({ queue, settings, onFinish, onThai }: Props) {
             <div className="answer">
               {expected}
               {!foreign && <SpeakButton id={current.id} onThai={fillThai} />}
-              {!foreign && thai && <div className="thai">{thai}</div>}
+              {!foreign && current.thai && <div className="thai">{current.thai}</div>}
             </div>
-            <div className="buttons">
-              <button ref={nextRef} className="primary" onClick={() => next()}>
-                {index + 1 >= queue.length ? "Результаты" : "Дальше"} ↵
-              </button>
-              {!phase.success && !phase.revealed && (
-                <button onClick={overrule} title="Ответ верный по смыслу или с опечаткой — засчитать как верный и перейти к следующему">
-                  Засчитать
+            {editing ? (
+              <WordEditor word={current} focusWord={!foreign} onSave={saveEdit} onCancel={() => setEditing(false)} />
+            ) : (
+              <div className="buttons after-answer">
+                {/* Компьютер — один ряд: «Засчитать» | «Дальше» | «Изменить».
+                    Телефон — пирамидка: «Дальше» во всю ширину, под ним «Засчитать» | «Изменить» */}
+                {!phase.success && !phase.revealed && (
+                  <button className="overrule-btn" onClick={overrule} title="Ответ верный по смыслу или с опечаткой — засчитать как верный и перейти к следующему">
+                    Засчитать
+                  </button>
+                )}
+                <button ref={nextRef} className="primary next-btn" onClick={() => next()}>
+                  {index + 1 >= queue.length ? "Результаты" : "Дальше"}<span className="kbd-hint"> ↵</span>
                 </button>
-              )}
-            </div>
+                <button className="edit-btn" onClick={() => setEditing(true)} title="Исправить слово или дописать вариант перевода — сохранится в словарь">
+                  ✎ Изменить
+                </button>
+              </div>
+            )}
           </>
         )}
       </section>
+    </div>
+  );
+}
+
+type EditorProps = {
+  word: Word;
+  /** Курсор сразу в поле слова (иначе — в переводы) */
+  focusWord: boolean;
+  onSave: (item: NewWord) => Promise<boolean>;
+  onCancel: () => void;
+};
+
+/** Правка слова прямо в тесте: Enter — сохранить, Esc — отмена. */
+function WordEditor({ word, focusWord, onSave, onCancel }: EditorProps) {
+  const [w, setW] = useState(word.word);
+  const [th, setTh] = useState(word.thai);
+  const [en, setEn] = useState(word.english);
+  const [tr, setTr] = useState(word.translation);
+  const [saving, setSaving] = useState(false);
+  const valid = !!w.trim() && !!(en.trim() || tr.trim());
+
+  async function save() {
+    if (!valid || saving) return;
+    setSaving(true);
+    // Теги не передаём — они не меняются
+    const ok = await onSave({ word: w, thai: th, english: en, translation: tr });
+    if (!ok) setSaving(false);
+  }
+
+  return (
+    <div className="word-editor" onKeyDown={(e) => e.key === "Escape" && onCancel()}>
+      <ToneInput value={w} onChange={setW} onEnter={save} placeholder="Слово" autoFocus={focusWord} />
+      <ThaiFillButton word={w} thai={th} english={en} translation={tr} onFill={setTh}>
+        <ToneInput value={th} onChange={setTh} onEnter={save} placeholder="ไทย — тайское написание" tones={false} />
+      </ThaiFillButton>
+      <ToneInput value={en} onChange={setEn} onEnter={save} placeholder="English (варианты через запятую)" tones={false} autoFocus={!focusWord} />
+      <ToneInput value={tr} onChange={setTr} onEnter={save} placeholder="Перевод (рус., варианты через запятую)" tones={false} />
+      <div className="buttons">
+        <button className="primary" onClick={save} disabled={!valid || saving}>Сохранить ↵</button>
+        <button onClick={onCancel}>Отмена</button>
+      </div>
     </div>
   );
 }

@@ -34,6 +34,8 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .app { max-width: 960px; margin: 0 auto; padding: 16px 16px 48px; padding-top: max(16px, env(safe-area-inset-top)); }
 header { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; justify-content: space-between; margin-bottom: 16px; }
 h1 { font-size: 22px; margin: 0; cursor: pointer; letter-spacing: -0.01em; }
+/* Внутри Telegram название и так в его шапке — свой заголовок не нужен (класс .tg ставит src/telegram.ts) */
+.tg .app > header { display: none; }
 h2 { font-size: 16px; margin: 0 0 12px; font-weight: 600; }
 .train-box { display: flex; flex-direction: column; gap: 12px; }
 .settings { display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: center; font-size: 14px; color: var(--muted); }
@@ -158,6 +160,21 @@ button.tag:hover:not(:disabled) { background: var(--accent); color: #fff; }
 .buttons button { flex: 1; min-width: 140px; }
 .verdict { text-align: center; font-weight: 600; }
 .answer { text-align: center; font-size: 24px; }
+.word-editor { display: flex; flex-direction: column; gap: 8px; }
+/* После ответа. Компьютер — один ряд: «Засчитать» | «Дальше» (по центру) | «Изменить» */
+.after-answer { flex-wrap: nowrap; }
+.after-answer button { min-width: 0; white-space: nowrap; padding-inline: 8px; }
+/* Телефон — пирамидка: «Дальше» во всю ширину сверху (там, где была «Проверить»),
+   под ним «Засчитать» | «Изменить» */
+@media (max-width: 560px) {
+  .after-answer { display: grid; grid-template-columns: 1fr 1fr; }
+  .after-answer .next-btn { grid-column: 1 / -1; order: -1; padding-block: 14px; }
+  .after-answer .next-btn:first-child ~ .edit-btn { grid-column: 1 / -1; } /* «Засчитать» нет */
+  /* До ответа так же: «Проверить» во всю ширину — на том же месте потом окажется «Дальше» */
+  .before-answer { flex-direction: column; }
+  .before-answer .primary { padding-block: 14px; }
+  .kbd-hint { display: none; } /* на телефоне нет Enter */
+}
 
 /* статистика */
 .stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }

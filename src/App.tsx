@@ -46,7 +46,15 @@ export default function App() {
     });
     return count;
   };
-  const update = (id: number, item: NewWord) => call(() => api.update(id, item), (row) => setWords((ws) => ws.map((w) => (w.id === id ? row : w))));
+  /** Сохраняет правку; возвращает сохранённое слово или null при ошибке. */
+  const update = async (id: number, item: NewWord) => {
+    let saved: Word | null = null;
+    await call(() => api.update(id, item), (row) => {
+      saved = row;
+      setWords((ws) => ws.map((w) => (w.id === id ? row : w)));
+    });
+    return saved as Word | null;
+  };
   const resetScores = (ids: number[]) => call(() => api.resetScores(ids), setWords);
   const remove = (id: number) => call(() => api.remove(id), () => setWords((ws) => ws.filter((w) => w.id !== id)));
 
@@ -83,7 +91,7 @@ export default function App() {
           queue={screen.queue}
           settings={settings}
           onFinish={(r) => finish(r, screen.queue.length)}
-          onThai={(w, thai) => update(w.id, { word: w.word, translation: w.translation, english: w.english, thai })}
+          onUpdate={update}
         />
       )}
       {screen.kind === "stats" && (
