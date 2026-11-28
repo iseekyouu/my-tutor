@@ -23,8 +23,6 @@ export function Dictionary({ words, onAdd, onUpdate, onDelete, onResetScores, on
   const [en, setEn] = useState("");
   const [th, setTh] = useState("");
   const [tags, setTags] = useState<string[]>([]); // остаются после добавления — удобно вводить группу
-  const [bulk, setBulk] = useState("");
-  const [showBulk, setShowBulk] = useState(false);
   const [editId, setEditId] = useState<number | null>(null);
   const [editWord, setEditWord] = useState("");
   const [editTr, setEditTr] = useState("");
@@ -91,7 +89,7 @@ export function Dictionary({ words, onAdd, onUpdate, onDelete, onResetScores, on
   const canAdd = !!word.trim() && !!(tr.trim() || en.trim()) && !dup;
   const [notice, setNotice] = useState<string | null>(null);
 
-  /** Сообщение после добавления списком/импорта: сколько добавлено и сколько дублей пропущено. */
+  /** Сообщение после импорта: сколько добавлено и сколько дублей пропущено. */
   function report(sent: number, added: number) {
     const skipped = sent - added;
     setNotice(`Добавлено: ${added}` + (skipped ? `, пропущено дублей: ${skipped}` : ""));
@@ -106,16 +104,6 @@ export function Dictionary({ words, onAdd, onUpdate, onDelete, onResetScores, on
     setEn("");
     setTh("");
     wordRef.current?.focus();
-  }
-
-  async function addBulk() {
-    const parsed = parseBulk(bulk).map((w) => ({ ...w, tags }));
-    if (!parsed.length) return;
-    const added = await onAdd(parsed);
-    if (added === null) return;
-    report(parsed.length, added);
-    setBulk("");
-    setShowBulk(false);
   }
 
   /**
@@ -227,23 +215,11 @@ export function Dictionary({ words, onAdd, onUpdate, onDelete, onResetScores, on
         <p className="hint">Достаточно одного перевода — русского или английского; в тренировке засчитывается любой. Тайское написание необязательно: по нему работает 🔊 (и в самом поле), без него озвучивается перевод значения через Google. Кнопка-искра в поле заполняет его по слову и переводу (Gemini) — проверьте результат. Несколько вариантов — через запятую: «дом, здание». Гласные с тонами — в таблице под полем слова: строка — гласная, столбец — тон (средний, низкий, нисходящий, высокий, восходящий).</p>
 
         <div className="row-actions">
-          <button className="link" onClick={() => setShowBulk(!showBulk)}>
-            {showBulk ? "Скрыть списком" : "Добавить списком"}
-          </button>
           <button className="link" onClick={() => fileRef.current?.click()}>Импорт</button>
           <button className="link" onClick={exportJSON} disabled={!words.length}>Экспорт</button>
           <input ref={fileRef} type="file" accept=".json,.txt,.csv,.tsv" hidden onChange={(e) => { const f = e.target.files?.[0]; if (f) importFile(f); e.target.value = ""; }} />
         </div>
 
-        {showBulk && (
-          <div className="bulk">
-            {tags.length > 0 && <p className="hint">Всем словам из списка добавятся теги из поля «Теги»: {tags.join(", ")}</p>}
-            <textarea value={bulk} onChange={(e) => setBulk(e.target.value)} rows={6} placeholder={"По одному на строку: слово - перевод - english\nสวัสดี - привет - hello\nขอบคุณ - спасибо\nแมว - - cat"} />
-            <button className="primary" onClick={addBulk} disabled={!parseBulk(bulk).length}>
-              Добавить {parseBulk(bulk).length || ""}
-            </button>
-          </div>
-        )}
       </section>
 
       <section className="card train-box">

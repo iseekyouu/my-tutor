@@ -111,9 +111,6 @@ button.tag:hover:not(:disabled) { background: var(--accent); color: #fff; }
 .warn { font-size: 14px; color: var(--bad); margin: 8px 0 0; }
 .notice { font-size: 14px; color: var(--ok); margin: 8px 0 0; }
 .row-actions { display: flex; gap: 16px; margin-top: 8px; }
-.bulk { display: flex; flex-direction: column; gap: 8px; margin-top: 8px; }
-.bulk textarea { font-size: 15px; resize: vertical; }
-.bulk button { align-self: flex-start; }
 
 /* поле с тонами */
 .translations { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
