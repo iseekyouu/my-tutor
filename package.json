@@ -9,7 +9,9 @@
     "build": "bun build ./index.html --outdir dist --production --env 'PUBLIC_*'",
     "typecheck": "tsc --noEmit",
     "test": "bun test",
-    "lint": "oxlint"
+    "lint": "oxlint",
+    "deploy": "bun scripts/deploy.ts",
+    "deploy:db": "bun scripts/deploy.ts --with-db"
   },
   "dependencies": {
     "react": "^19.3.1",

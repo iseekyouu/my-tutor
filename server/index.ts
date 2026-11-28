@@ -1,7 +1,12 @@
 import index from "../index.html";
 import { openDb, type NewWord, type ResultInput } from "./db";
+import { applyPendingImport } from "./import";
+import { suggestThai, ThaiError } from "./gemini";
+import { speech, thaiText, type SpeakSource } from "./tts";
 
-const db = openDb(process.env.DB_PATH ?? "data.db");
+const dbPath = process.env.DB_PATH ?? "data.db";
+applyPendingImport(dbPath); // bun run deploy --with-db: подменить базу загруженной
+const db = openDb(dbPath);
 const port = Number(process.env.PORT ?? 3000);
 const isDev = process.env.NODE_ENV !== "production";
 
@@ -24,6 +29,7 @@ const isNewWord = (v: any): v is NewWord =>
   isText(v.word) &&
   isOptText(v.translation) &&
   isOptText(v.english) &&
+  isOptText(v.thai) &&
   isOptTags(v.tags) &&
   (isText(v.translation) || isText(v.english));
 
@@ -32,6 +38,20 @@ async function body(req: Request): Promise<any> {
     return await req.json();
   } catch {
     return undefined;
+  }
+}
+
+/** mp3 с произношением: тайское написание, а без него — перевод значения на тайский. */
+async function speak(src: SpeakSource): Promise<Response> {
+  try {
+    const thai = await thaiText(src);
+    const audio = thai && (await speech(thai));
+    if (!audio) return error("Не удалось получить озвучку", 502);
+    return new Response(audio.body, {
+      headers: { ...cors, "Content-Type": "audio/mpeg", "X-Thai-Text": encodeURIComponent(thai) },
+    });
+  } catch {
+    return error("Не удалось получить озвучку", 502);
   }
 }
 
@@ -93,6 +113,40 @@ const server = Bun.serve({
         return json(db.saveResults(data as ResultInput[]));
       },
       OPTIONS: () => new Response(null, { headers: cors }),
+    },
+
+    // Подсказка тайского написания (Gemini): { word, english?, translation? } → { thai }
+    "/api/thai": {
+      POST: async (req) => {
+        const data = await body(req);
+        const short = (v: unknown) => v === undefined || (typeof v === "string" && v.length <= 200);
+        if (!isText(data?.word) || !short(data.word) || !short(data.english) || !short(data.translation) || !isOptText(data.english) || !isOptText(data.translation))
+          return error("Ожидается { word, english?, translation? } (до 200 символов)");
+        try {
+          return json({ thai: await suggestThai(data) });
+        } catch (e) {
+          return e instanceof ThaiError ? error(e.message, e.status) : error("Не удалось получить тайское написание", 502);
+        }
+      },
+      OPTIONS: () => new Response(null, { headers: cors }),
+    },
+
+    // Озвучка сохранённого слова: тайское написание или перевод значения → речь Google, без сохранения
+    "/api/tts/:id": {
+      GET: (req) => {
+        const w = db.get(Number(req.params.id));
+        return w ? speak(w) : error("Слово не найдено", 404);
+      },
+    },
+    // Озвучка ещё не сохранённого слова (форма добавления/правки): ?word=&thai=&english=&translation=
+    "/api/tts": {
+      GET: (req) => {
+        const p = new URL(req.url).searchParams;
+        const src = { word: p.get("word") ?? "", thai: p.get("thai") ?? "", english: p.get("english") ?? "", translation: p.get("translation") ?? "" };
+        if (Object.values(src).some((v) => v.length > 200)) return error("Слишком длинный текст (до 200 символов)");
+        if (!src.word.trim() && !src.thai.trim() && !src.english.trim() && !src.translation.trim()) return error("Нечего озвучивать");
+        return speak(src);
+      },
     },
 
     "/api/*": () => error("Not found", 404),

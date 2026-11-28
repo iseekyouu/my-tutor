@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { SpeakButton } from "./SpeakButton";
 import { ToneInput, type ToneInputHandle } from "./ToneInput";
 import { isCorrect, meaning, type Result, type Settings, type Word } from "./lib";
 
@@ -23,7 +24,8 @@ export function Training({ queue, settings, onFinish }: Props) {
   const prompt = foreign ? current.word : meaning(current);
   // Показываем слово — принимаем и русский, и английский перевод
   const expected = foreign ? meaning(current) : current.word;
-  const accepted = foreign ? [current.translation, current.english] : [current.word];
+  // Слово можно написать и транслитерацией, и тайскими буквами
+  const accepted = foreign ? [current.translation, current.english] : [current.word, current.thai];
   const okCount = results.filter((r) => r.success).length;
 
   useEffect(() => {
@@ -59,7 +61,11 @@ export function Training({ queue, settings, onFinish }: Props) {
       <div className="bar"><div style={{ width: `${(results.length / queue.length) * 100}%` }} /></div>
 
       <section className="card prompt-card">
-        <div className="prompt">{prompt}</div>
+        <div className="prompt">
+          {prompt}
+          {foreign && <SpeakButton id={current.id} />}
+          {foreign && current.thai && <div className="thai">{current.thai}</div>}
+        </div>
 
         <ToneInput
           ref={inputRef}
@@ -82,7 +88,11 @@ export function Training({ queue, settings, onFinish }: Props) {
             <div className={"verdict " + (phase.success ? "ok" : "bad")}>
               {phase.success ? "Верно!" : phase.revealed ? "Ответ показан — засчитано как ошибка" : "Неверно"}
             </div>
-            <div className="answer">{expected}</div>
+            <div className="answer">
+              {expected}
+              {!foreign && <SpeakButton id={current.id} />}
+              {!foreign && current.thai && <div className="thai">{current.thai}</div>}
+            </div>
             <div className="buttons">
               <button ref={nextRef} className="primary" onClick={next}>
                 {index + 1 >= queue.length ? "Результаты" : "Дальше"} ↵

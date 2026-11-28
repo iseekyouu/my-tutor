@@ -27,3 +27,13 @@ dist-ssr
 data.db*
 *.db-shm
 *.db-wal
+
+# секреты (GEMINI_API_KEY)
+.env
+.env.*
+!.env.example
+
+# резервные копии слов с сервера (bun run deploy --with-db)
+backups/
+# локальная история файлов редактора
+.history/

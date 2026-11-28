@@ -56,6 +56,29 @@ button.small { padding: 6px 10px; font-size: 14px; }
 button.link { border: none; background: none; padding: 4px 0; color: var(--accent); font-size: 14px; }
 button.link:hover:not(:disabled) { background: none; text-decoration: underline; }
 button.icon { border: none; background: none; padding: 6px 8px; color: var(--muted); }
+button.speak { padding: 2px 6px; margin-left: 4px; font-size: 0.8em; vertical-align: middle; color: var(--accent); opacity: .8; line-height: 1; }
+button.speak:hover { opacity: 1; }
+button.speak.failed { opacity: .35; }
+.prompt button.speak { font-size: 24px; }
+/* Кнопка-искра — часть поля: внутри справа, на всю высоту, за разделителем */
+.thai-field { display: flex; flex-direction: column; gap: 4px; }
+.thai-box { position: relative; }
+.thai-box input:not([type]) { padding-right: 96px; text-overflow: ellipsis; }
+.field-actions { position: absolute; top: 1px; right: 1px; bottom: 1px; display: flex; border-radius: 0 9px 9px 0; overflow: hidden; }
+.field-btn {
+  width: 44px; display: flex; align-items: center; justify-content: center; padding: 0;
+  border: none; border-left: 1px solid var(--line); border-radius: 0;
+  background: var(--accent-2); color: var(--accent); font-size: 17px;
+}
+.field-btn:hover:not(:disabled) { filter: brightness(.96); background: var(--accent-2); }
+.field-btn:disabled { opacity: 1; color: var(--muted); background: transparent; }
+.field-btn:disabled svg { opacity: .55; }
+.field-btn.failed { opacity: .5; }
+.field-btn:focus-visible { outline-offset: -2px; }
+.thai-field .fill-error { margin: 0; }
+.thai { display: block; font-size: 15px; font-weight: 400; color: var(--muted); }
+.prompt .thai { font-size: 24px; }
+.answer .thai { font-size: 18px; }
 button.start { background: var(--accent); color: #fff; border: none; font-size: 18px; padding: 16px; border-radius: var(--radius); font-weight: 600; }
 button.start:hover:not(:disabled) { background: var(--accent); filter: brightness(1.08); }
 
@@ -80,7 +103,8 @@ button.primary[aria-disabled="true"]:hover { filter: none; }
 .tag button { border: none; background: none; padding: 0 0 0 2px; color: inherit; font-size: 14px; line-height: 1; cursor: pointer; }
 button.tag:hover:not(:disabled) { background: var(--accent); color: #fff; }
 .words .tags { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 4px; }
-.tag-filter { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 10px; }
+.tag-filter { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.tag-filter > span { font-size: 14px; color: var(--muted); margin-right: 2px; }
 .tag-filter button { padding: 4px 12px; font-size: 13px; border-radius: 999px; }
 .tag-filter button.active, .tag-filter button.active:hover { background: var(--accent); color: #fff; border-color: var(--accent); }
 .start-tag { font-weight: 400; opacity: .85; }

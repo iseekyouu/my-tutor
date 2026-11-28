@@ -3,12 +3,13 @@ export type Word = {
   word: string; // иностранное слово
   translation: string; // русский перевод ("" — нет)
   english: string; // английский перевод ("" — нет)
+  thai: string; // тайское написание ("" — нет), по нему озвучка
   tags: string[]; // теги-группы, в нижнем регистре
   ok: number; // всего успехов
   fail: number; // всего неудач
 };
 
-export type NewWord = { word: string; translation?: string; english?: string; tags?: string[]; ok?: number; fail?: number };
+export type NewWord = { word: string; translation?: string; english?: string; thai?: string; tags?: string[]; ok?: number; fail?: number };
 
 export type Direction = "foreign" | "native"; // что показываем
 export type Settings = { direction: Direction; strictTones: boolean };

@@ -23,12 +23,21 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 }
 
 
+export type SpeakText = { word: string; thai: string; english: string; translation: string };
+
 export const api = {
   list: () => request<Word[]>("/api/words"),
   add: (words: NewWord[]) => request<Word[]>("/api/words", { method: "POST", body: JSON.stringify(words) }),
   update: (id: number, w: NewWord) => request<Word>(`/api/words/${id}`, { method: "PUT", body: JSON.stringify(w) }),
   remove: (id: number) => request<{ ok: true }>(`/api/words/${id}`, { method: "DELETE" }),
   resetScores: (ids: number[]) => request<Word[]>("/api/reset", { method: "POST", body: JSON.stringify({ ids }) }),
+  /** Тайское написание по транслитерации и переводу (Gemini) */
+  suggestThai: (w: { word: string; english: string; translation: string }) =>
+    request<{ thai: string }>("/api/thai", { method: "POST", body: JSON.stringify(w) }),
+  /** Адрес mp3 с озвучкой слова */
+  ttsUrl: (id: number) => `${BASE}/api/tts/${id}`,
+  /** Адрес mp3 для ещё не сохранённого слова (по полям формы) */
+  ttsTextUrl: (w: SpeakText) => `${BASE}/api/tts?${new URLSearchParams(w)}`,
   saveResults: (results: { id: number; success: boolean }[]) =>
     request<Word[]>("/api/results", { method: "POST", body: JSON.stringify(results) }),
 };

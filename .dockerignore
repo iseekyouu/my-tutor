@@ -34,3 +34,7 @@ data.db*
 Dockerfile
 fly.toml
 *.test.ts
+.env
+.env.*
+backups
+.history
