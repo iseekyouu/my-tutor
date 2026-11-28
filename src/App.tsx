@@ -78,7 +78,13 @@ export default function App() {
       {screen.kind === "loading" && !error && <p className="empty">Загрузка…</p>}
       {screen.kind === "dict" && <Dictionary words={words} onAdd={add} onUpdate={update} onDelete={remove} onResetScores={resetScores} onStart={start} settings={settings} onSettings={setSettings} />}
       {screen.kind === "train" && (
-        <Training key={screen.key} queue={screen.queue} settings={settings} onFinish={(r) => finish(r, screen.queue.length)} />
+        <Training
+          key={screen.key}
+          queue={screen.queue}
+          settings={settings}
+          onFinish={(r) => finish(r, screen.queue.length)}
+          onThai={(w, thai) => update(w.id, { word: w.word, translation: w.translation, english: w.english, thai })}
+        />
       )}
       {screen.kind === "stats" && (
         <Stats

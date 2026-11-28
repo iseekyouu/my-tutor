@@ -9,10 +9,12 @@ type Props = {
   /** Или текст из полей формы (слово ещё не сохранено или правится) */
   text?: SpeakText;
   className?: string;
+  /** Тайского написания нет — сюда придёт тайский текст, который озвучил сервер (чтобы заполнить поле) */
+  onThai?: (thai: string) => void;
 };
 
 /** 🔊 — проигрывает произношение слова (голос Google, через сервер). */
-export function SpeakButton({ id, text, className = "icon speak" }: Props) {
+export function SpeakButton({ id, text, className = "icon speak", onThai }: Props) {
   // Озвучить можно тайское написание, перевод значения или слово тайскими буквами
   const empty = !!text && !text.thai.trim() && !text.english.trim() && !text.translation.trim() && !/[\u0E00-\u0E7F]/.test(text.word);
   const [state, setState] = useState<"idle" | "loading" | "error">("idle");
@@ -20,7 +22,18 @@ export function SpeakButton({ id, text, className = "icon speak" }: Props) {
   function play(e: React.MouseEvent) {
     e.stopPropagation(); // в словаре клик по строке открывает правку
     current?.pause();
-    const audio = new Audio(text ? api.ttsTextUrl(text) : api.ttsUrl(id!));
+    const url = text ? api.ttsTextUrl(text) : api.ttsUrl(id!);
+    // Звук запускаем сразу, в самом нажатии — иначе Safari на iPhone его не проиграет
+    const audio = new Audio(url);
+    if (onThai) {
+      // Заодно узнаём, какой тайский текст озвучен (сервер помнит его — Gemini второй раз не спрашивается)
+      fetch(url, { headers: { Range: "bytes=0-1" } })
+        .then((r) => decodeURIComponent(r.headers.get("X-Thai-Text") ?? ""))
+        .then((thai) => {
+          if (/[\u0E00-\u0E7F]/.test(thai) && thai !== text?.word) onThai(thai);
+        })
+        .catch(() => {});
+    }
     current = audio;
     setState("loading");
     audio.onplaying = () => setState("idle");

@@ -7,17 +7,21 @@ type Props = {
   queue: Word[];
   settings: Settings;
   onFinish: (results: Result[]) => void;
+  /** Тайского написания не было — озвучка его нашла, сохранить в словарь */
+  onThai?: (word: Word, thai: string) => void;
 };
 
 type Phase = { kind: "ask" } | { kind: "answered"; success: boolean; revealed: boolean };
 
-export function Training({ queue, settings, onFinish }: Props) {
+export function Training({ queue, settings, onFinish, onThai }: Props) {
   const [index, setIndex] = useState(0);
   const [answer, setAnswer] = useState("");
   const [phase, setPhase] = useState<Phase>({ kind: "ask" });
   const [results, setResults] = useState<Result[]>([]);
   const inputRef = useRef<ToneInputHandle>(null);
   const nextRef = useRef<HTMLButtonElement>(null);
+  // Тайское написание, найденное озвучкой во время тренировки (очередь — снимок словаря)
+  const [foundThai, setFoundThai] = useState<Record<number, string>>({});
 
   const current = queue[index];
   const foreign = settings.direction === "foreign";
@@ -27,6 +31,13 @@ export function Training({ queue, settings, onFinish }: Props) {
   // Слово можно написать и транслитерацией, и тайскими буквами
   const accepted = foreign ? [current.translation, current.english] : [current.word, current.thai];
   const okCount = results.filter((r) => r.success).length;
+  const thai = current.thai || foundThai[current.id] || "";
+  const fillThai = current.thai
+    ? undefined
+    : (t: string) => {
+        setFoundThai((f) => ({ ...f, [current.id]: t }));
+        onThai?.(current, t);
+      };
 
   useEffect(() => {
     if (phase.kind === "ask") inputRef.current?.focus();
@@ -40,8 +51,16 @@ export function Training({ queue, settings, onFinish }: Props) {
     setPhase({ kind: "answered", success, revealed });
   }
 
-  function next() {
-    if (index + 1 >= queue.length) return onFinish(results);
+  /** Ответ сочли неверным, но по смыслу он верный (опечатка, другая формулировка) — засчитать и сразу дальше. */
+  function overrule() {
+    if (phase.kind !== "answered" || phase.success || phase.revealed) return;
+    const updated = results.map((r, i) => (i === results.length - 1 ? { ...r, success: true, overruled: true } : r));
+    setResults(updated);
+    next(updated);
+  }
+
+  function next(final = results) {
+    if (index + 1 >= queue.length) return onFinish(final);
     setIndex(index + 1);
     setAnswer("");
     setPhase({ kind: "ask" });
@@ -63,8 +82,8 @@ export function Training({ queue, settings, onFinish }: Props) {
       <section className="card prompt-card">
         <div className="prompt">
           {prompt}
-          {foreign && <SpeakButton id={current.id} />}
-          {foreign && current.thai && <div className="thai">{current.thai}</div>}
+          {foreign && <SpeakButton id={current.id} onThai={fillThai} />}
+          {foreign && thai && <div className="thai">{thai}</div>}
         </div>
 
         <ToneInput
@@ -90,13 +109,18 @@ export function Training({ queue, settings, onFinish }: Props) {
             </div>
             <div className="answer">
               {expected}
-              {!foreign && <SpeakButton id={current.id} />}
-              {!foreign && current.thai && <div className="thai">{current.thai}</div>}
+              {!foreign && <SpeakButton id={current.id} onThai={fillThai} />}
+              {!foreign && thai && <div className="thai">{thai}</div>}
             </div>
             <div className="buttons">
-              <button ref={nextRef} className="primary" onClick={next}>
+              <button ref={nextRef} className="primary" onClick={() => next()}>
                 {index + 1 >= queue.length ? "Результаты" : "Дальше"} ↵
               </button>
+              {!phase.success && !phase.revealed && (
+                <button onClick={overrule} title="Ответ верный по смыслу или с опечаткой — засчитать как верный и перейти к следующему">
+                  Засчитать
+                </button>
+              )}
             </div>
           </>
         )}

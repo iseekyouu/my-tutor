@@ -14,7 +14,8 @@ const isDev = process.env.NODE_ENV !== "production";
 const cors = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
-  "Access-Control-Allow-Headers": "Content-Type",
+  "Access-Control-Allow-Headers": "Content-Type, Range",
+  "Access-Control-Expose-Headers": "X-Thai-Text, Content-Range",
 };
 
 const json = (data: unknown, status = 200) => Response.json(data, { status, headers: cors });
@@ -41,18 +42,36 @@ async function body(req: Request): Promise<any> {
   }
 }
 
-/** mp3 с произношением: тайское написание, а без него — перевод значения на тайский. */
-async function speak(src: SpeakSource): Promise<Response> {
+/**
+ * mp3 с произношением: тайское написание, а без него — перевод значения на тайский.
+ * Отдаётся целиком с размером и по частям (Range → 206): плеер Safari/WebKit — в том числе
+ * внутри Telegram на iPhone и Mac — сначала просит «bytes=0-1» и без 206 звук не играет.
+ */
+async function speak(req: Request, src: SpeakSource): Promise<Response> {
+  let thai: string | null;
+  let mp3: Uint8Array<ArrayBuffer>;
   try {
-    const thai = await thaiText(src);
+    thai = await thaiText(src);
     const audio = thai && (await speech(thai));
-    if (!audio) return error("Не удалось получить озвучку", 502);
-    return new Response(audio.body, {
-      headers: { ...cors, "Content-Type": "audio/mpeg", "X-Thai-Text": encodeURIComponent(thai) },
-    });
+    if (!thai || !audio) return error("Не удалось получить озвучку", 502);
+    mp3 = audio;
   } catch {
     return error("Не удалось получить озвучку", 502);
   }
+  const headers = { ...cors, "Content-Type": "audio/mpeg", "Accept-Ranges": "bytes", "X-Thai-Text": encodeURIComponent(thai) };
+  const size = mp3.length;
+  const range = /^bytes=(\d*)-(\d*)$/.exec(req.headers.get("Range") ?? "");
+  if (range && (range[1] || range[2])) {
+    // bytes=a-b, bytes=a- (до конца), bytes=-n (последние n)
+    const start = range[1] ? Number(range[1]) : Math.max(0, size - Number(range[2]));
+    const end = range[1] && range[2] ? Math.min(Number(range[2]), size - 1) : size - 1;
+    if (start >= size || start > end) return new Response(null, { status: 416, headers: { ...headers, "Content-Range": `bytes */${size}` } });
+    return new Response(mp3.slice(start, end + 1), {
+      status: 206,
+      headers: { ...headers, "Content-Range": `bytes ${start}-${end}/${size}`, "Content-Length": String(end - start + 1) },
+    });
+  }
+  return new Response(mp3, { headers: { ...headers, "Content-Length": String(size) } });
 }
 
 const server = Bun.serve({
@@ -135,7 +154,7 @@ const server = Bun.serve({
     "/api/tts/:id": {
       GET: (req) => {
         const w = db.get(Number(req.params.id));
-        return w ? speak(w) : error("Слово не найдено", 404);
+        return w ? speak(req, w) : error("Слово не найдено", 404);
       },
     },
     // Озвучка ещё не сохранённого слова (форма добавления/правки): ?word=&thai=&english=&translation=
@@ -145,7 +164,7 @@ const server = Bun.serve({
         const src = { word: p.get("word") ?? "", thai: p.get("thai") ?? "", english: p.get("english") ?? "", translation: p.get("translation") ?? "" };
         if (Object.values(src).some((v) => v.length > 200)) return error("Слишком длинный текст (до 200 символов)");
         if (!src.word.trim() && !src.thai.trim() && !src.english.trim() && !src.translation.trim()) return error("Нечего озвучивать");
-        return speak(src);
+        return speak(req, src);
       },
     },
 

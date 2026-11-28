@@ -36,7 +36,7 @@ export function ThaiFillButton({ word, english, translation, thai, onFill, child
       <div className="thai-box">
         {children}
         <div className="field-actions">
-          <SpeakButton text={{ word, thai, english, translation }} className="field-btn" />
+          <SpeakButton text={{ word, thai, english, translation }} className="field-btn" onThai={thai.trim() ? undefined : onFill} />
           <button
             type="button"
             className="field-btn fill-thai"

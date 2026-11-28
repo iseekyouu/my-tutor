@@ -187,41 +187,6 @@ export function Dictionary({ words, onAdd, onUpdate, onDelete, onResetScores, on
 
   return (
     <div className="screen">
-      <section className="card">
-        <h2>Добавить слово</h2>
-        <div className="add-form">
-          <div className="translations">
-            <ToneInput ref={wordRef} value={word} onChange={setWord} placeholder="Слово (иностранное)" onEnter={() => thRef.current?.focus()} />
-            <ThaiFillButton word={word} thai={th} english={en} translation={tr} onFill={setTh}>
-              <ToneInput ref={thRef} value={th} onChange={setTh} placeholder="ไทย — тайское написание" onEnter={() => enRef.current?.focus()} tones={false} />
-            </ThaiFillButton>
-          </div>
-          <div className="translations">
-            <ToneInput ref={enRef} value={en} onChange={setEn} placeholder="English" onEnter={() => trRef.current?.focus()} tones={false} />
-            <ToneInput ref={trRef} value={tr} onChange={setTr} placeholder="Перевод (рус.)" onEnter={add} tones={false} />
-            <TagInput value={tags} onChange={setTags} suggestions={tagNames} recent={recentTags} onEnter={add} placeholder="Теги (Enter или запятая)" />
-          </div>
-          {/* Не disabled, а aria-disabled: иначе Tab перепрыгивает кнопку. tabIndex — для Safari */}
-          <button className="primary" onClick={add} aria-disabled={!canAdd} tabIndex={0}>
-            Добавить
-          </button>
-        </div>
-        {dup && (
-          <p className="warn">
-            Уже есть в словаре: <b>{dup.word}</b> — {meaning(dup)}
-          </p>
-        )}
-        {notice && <p className="notice">{notice}</p>}
-        <p className="hint">Достаточно одного перевода — русского или английского; в тренировке засчитывается любой. Тайское написание необязательно: по нему работает 🔊 (и в самом поле), без него озвучивается перевод значения через Google. Кнопка-искра в поле заполняет его по слову и переводу (Gemini) — проверьте результат. Несколько вариантов — через запятую: «дом, здание». Гласные с тонами — в таблице под полем слова: строка — гласная, столбец — тон (средний, низкий, нисходящий, высокий, восходящий).</p>
-
-        <div className="row-actions">
-          <button className="link" onClick={() => fileRef.current?.click()}>Импорт</button>
-          <button className="link" onClick={exportJSON} disabled={!words.length}>Экспорт</button>
-          <input ref={fileRef} type="file" accept=".json,.txt,.csv,.tsv" hidden onChange={(e) => { const f = e.target.files?.[0]; if (f) importFile(f); e.target.value = ""; }} />
-        </div>
-
-      </section>
-
       <section className="card train-box">
         {allTags.length > 0 && (
           <div className="tag-filter" title="Можно выбрать несколько тегов — в обучение попадут слова с любым из них">
@@ -253,6 +218,41 @@ export function Dictionary({ words, onAdd, onUpdate, onDelete, onResetScores, on
           Начать обучение {toTrain.length ? `(${toTrain.length})` : ""}
           {activeTags.length > 0 && <span className="start-tag"> · {activeTags.join(", ")}</span>}
         </button>
+      </section>
+
+      <section className="card">
+        <h2>Добавить слово</h2>
+        <div className="add-form">
+          <div className="translations">
+            <ToneInput ref={wordRef} value={word} onChange={setWord} placeholder="Слово (иностранное)" onEnter={() => thRef.current?.focus()} />
+            <ThaiFillButton word={word} thai={th} english={en} translation={tr} onFill={setTh}>
+              <ToneInput ref={thRef} value={th} onChange={setTh} placeholder="ไทย — тайское написание" onEnter={() => enRef.current?.focus()} tones={false} />
+            </ThaiFillButton>
+          </div>
+          <div className="translations">
+            <ToneInput ref={enRef} value={en} onChange={setEn} placeholder="English" onEnter={() => trRef.current?.focus()} tones={false} />
+            <ToneInput ref={trRef} value={tr} onChange={setTr} placeholder="Перевод (рус.)" onEnter={add} tones={false} />
+            <TagInput value={tags} onChange={setTags} suggestions={tagNames} recent={recentTags} onEnter={add} placeholder="Теги (Enter или запятая)" />
+          </div>
+          {/* Не disabled, а aria-disabled: иначе Tab перепрыгивает кнопку. tabIndex — для Safari */}
+          <button className="primary" onClick={add} aria-disabled={!canAdd} tabIndex={0}>
+            Добавить
+          </button>
+        </div>
+        {dup && (
+          <p className="warn">
+            Уже есть в словаре: <b>{dup.word}</b> — {meaning(dup)}
+          </p>
+        )}
+        {notice && <p className="notice">{notice}</p>}
+        <p className="hint">Достаточно одного перевода — русского или английского; в тренировке засчитывается любой. Тайское написание необязательно: по нему работает 🔊 (и в самом поле), без него — тайский текст, который подскажет Gemini. Кнопка-искра в поле заполняет его по слову и переводу (Gemini) — проверьте результат. Несколько вариантов — через запятую: «дом, здание». Гласные с тонами — в таблице под полем слова: строка — гласная, столбец — тон (средний, низкий, нисходящий, высокий, восходящий).</p>
+
+        <div className="row-actions">
+          <button className="link" onClick={() => fileRef.current?.click()}>Импорт</button>
+          <button className="link" onClick={exportJSON} disabled={!words.length}>Экспорт</button>
+          <input ref={fileRef} type="file" accept=".json,.txt,.csv,.tsv" hidden onChange={(e) => { const f = e.target.files?.[0]; if (f) importFile(f); e.target.value = ""; }} />
+        </div>
+
       </section>
 
       <section className="card">
@@ -324,7 +324,7 @@ export function Dictionary({ words, onAdd, onUpdate, onDelete, onResetScores, on
               <li key={w.id} className="editable" title="Нажмите, чтобы изменить" onClick={() => startEdit(w)}>
                 <span className="w">
                   {w.word}
-                  <SpeakButton id={w.id} />
+                  <SpeakButton id={w.id} onThai={w.thai ? undefined : (thai) => onUpdate(w.id, { word: w.word, translation: w.translation, english: w.english, thai })} />
                   {w.thai && <span className="thai">{w.thai}</span>}
                 </span>
                 <span className="t">

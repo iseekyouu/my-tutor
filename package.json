@@ -11,7 +11,8 @@
     "test": "bun test",
     "lint": "oxlint",
     "deploy": "bun scripts/deploy.ts",
-    "deploy:db": "bun scripts/deploy.ts --with-db"
+    "deploy:db": "bun scripts/deploy.ts --with-db",
+    "telegram:setup": "bun scripts/telegram-setup.ts"
   },
   "dependencies": {
     "react": "^19.3.1",

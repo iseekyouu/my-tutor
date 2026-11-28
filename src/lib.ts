@@ -14,7 +14,8 @@ export type NewWord = { word: string; translation?: string; english?: string; th
 export type Direction = "foreign" | "native"; // что показываем
 export type Settings = { direction: Direction; strictTones: boolean };
 
-export type Result = { word: Word; success: boolean; given: string; revealed: boolean };
+/** overruled — ответ сочли неверным, но пользователь засчитал его (верно по смыслу, опечатка) */
+export type Result = { word: Word; success: boolean; given: string; revealed: boolean; overruled?: boolean };
 
 const SETTINGS_KEY = "lingo.settings.v1";
 
